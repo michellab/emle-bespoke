@@ -1,20 +1,21 @@
 import os
+import shutil
 import time
 from typing import Tuple
-import pandas as pd
+
 import numpy as np
 import openff.units as offunit
 import openmm.unit as unit
-from fes_ml.alchemical.modifications import _EMLE_CALCULATORS
-from fes_ml.fes import FES
-import shutil
-from scipy.optimize import minimize
-
+import pandas as pd
+import torch
 from _constants import ATOMIC_NUMBERS_TO_SYMBOLS, HARTREE_TO_KJ_MOL
 from _orca_parser import ORCACalculator
-import torch
+from fes_ml.alchemical.modifications import _EMLE_CALCULATORS
+from fes_ml.fes import FES
+from scipy.optimize import minimize
 
 torch.inverse(torch.ones((1, 1), device="cuda:0"))
+
 
 def get_model_data(context, emle_calculator, positions, pbc, *args, **kwargs):
     e_static_emle = []
@@ -55,20 +56,22 @@ def _loss_function(
     model_data, _, _ = get_model_data(
         context, emle_calculator, positions, pbc, *args, **kwargs
     )
- 
+
     return np.mean((ref_data - model_data) ** 2) / np.std(ref_data)
 
+
 def loss_function(
-    x, 
-    e_total_ref: np.ndarray, 
-    e_static_ref: np.ndarray, 
-    e_ind_ref: np.ndarray, 
-    context, 
-    emle_calculator, 
-    positions, 
-    pbc, *args, **kwargs
+    x,
+    e_total_ref: np.ndarray,
+    e_static_ref: np.ndarray,
+    e_ind_ref: np.ndarray,
+    context,
+    emle_calculator,
+    positions,
+    pbc,
+    *args,
+    **kwargs,
 ) -> float:
-    
     set_model_parameters(x, *args, **kwargs)
     e_total_emle, e_static_emle, e_ind_emle = get_model_data(
         context, emle_calculator, positions, pbc, *args, **kwargs
@@ -127,7 +130,7 @@ def get_reference_data_inner_loop(
 
     e_int = (qm_mm_energy - vacuum_energy) * HARTREE_TO_KJ_MOL
     e_ind = e_int - e_static
-    
+
     print(f"Vacuum energy: {vacuum_energy}")
     print(f"QM/MM energy: {qm_mm_energy}")
     print(f"Interaction energy: {e_int}")
@@ -195,7 +198,6 @@ def main(mol_name, smiles):
 
     window = 0
 
-
     # Get the system
     omm_system = fes.alchemical_states[window].system
     omm_context = fes.alchemical_states[window].context
@@ -260,7 +262,6 @@ def main(mol_name, smiles):
             with open(f"{mol_name}_{key}.pkl", "wb") as f:
                 pickle.dump(value, f)
 
-
     if not sample:
         # Load from pickles all ref data
         import pickle
@@ -276,7 +277,6 @@ def main(mol_name, smiles):
         pos_ref = pairs["pos_ref"][1:]
         pbc_ref = pairs["pbc_ref"][1:]
 
-
     e_total_tmp, e_static_tmp, e_ind_tmp = get_model_data(
         omm_context, emle_calculator, pos_ref, pbc_ref
     )
@@ -284,11 +284,10 @@ def main(mol_name, smiles):
     print("E_ind", e_ind_tmp)
     exit()
 
-
     import matplotlib.pyplot as plt
-    plt.plot(e_ind_ref)
-    plt.savefig("e_ind_ref.png") 
 
+    plt.plot(e_ind_ref)
+    plt.savefig("e_ind_ref.png")
 
     e_static_ref = np.array(e_static_ref)
     e_ind_ref = np.array(e_ind_ref)
@@ -298,12 +297,20 @@ def main(mol_name, smiles):
     e_total_emle, e_static_emle, e_ind_emle = get_model_data(
         omm_context, emle_calculator, pos_ref, pbc_ref
     )
-   
+
     print("Minimizing...")
     res = minimize(
         loss_function,
         [1, 1],
-        args=(total_energy_ref, e_static_ref, e_ind_ref, omm_context, emle_calculator, pos_ref, pbc_ref),
+        args=(
+            total_energy_ref,
+            e_static_ref,
+            e_ind_ref,
+            omm_context,
+            emle_calculator,
+            pos_ref,
+            pbc_ref,
+        ),
         method="cobyla",
         options={"disp": True, "maxiter": 1000},
     )
@@ -422,7 +429,7 @@ def main(mol_name, smiles):
     axs[2, 1].set_ylim(lim_low, lim_max)
 
     rmse = np.sqrt(np.mean((e_total_opt - total_energy_ref) ** 2))
-    axs[2, 1].set_title(f"Total Energy After Optimization, RMSE: {rmse:.2f}")    
+    axs[2, 1].set_title(f"Total Energy After Optimization, RMSE: {rmse:.2f}")
 
     plt.tight_layout()
     plt.savefig(f"{mol_name}_energy_comparison.png")
@@ -432,6 +439,7 @@ def main(mol_name, smiles):
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser(description="Run EMLE optimization.")
     parser.add_argument("mol_name", type=str, help="The name of the molecule.")
     parser.add_argument("smiles", type=str, help="The SMILES string of the molecule.")
