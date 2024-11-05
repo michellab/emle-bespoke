@@ -1,7 +1,7 @@
 import os
 import subprocess
 
-import numpy as np
+import torch
 
 from .._constants import ANGSTROM_TO_BOHR
 
@@ -22,7 +22,7 @@ class ORCACalculator:
     def write_input_file(
         self,
         elements: list[str],
-        positions: np.ndarray,
+        positions: torch.Tensor,
         orca_simple_input: str,
         orca_blocks: str,
         charge: int,
@@ -37,7 +37,7 @@ class ORCACalculator:
         ----------
         elements: list[str]
             The list of elements.
-        positions: np.ndarray
+        positions: torch.Tensor
             The positions of the atoms.
         orca_simple_input: str
             The simple input for ORCA.
@@ -63,7 +63,7 @@ class ORCACalculator:
             f"{orca_simple_input}\n{orca_blocks}\n* xyz {charge} {multiplicity}\n"
         )
         for element, position in zip(elements, positions):
-            input_file += f"{element} {position[0]} {position[1]} {position[2]}\n"
+            input_file += f"{element} {position[0].item()} {position[1].item()} {position[2].item()}\n"
         input_file += "*"
 
         with open(os.path.join(directory, input_file_name), "w") as f:
@@ -73,7 +73,7 @@ class ORCACalculator:
 
     def write_external_potentials(
         self,
-        external_potentials: np.ndarray,
+        external_potentials: torch.Tensor,
         file_name: str = "pointcharges.pc",
         directory: str = ".",
     ) -> None:
@@ -82,7 +82,7 @@ class ORCACalculator:
 
         Parameters
         ----------
-        external_potentials: np.ndarray
+        external_potentials: torch.Tensor
             The external potentials in the format (charge, x, y, z).
         file_name: str
             The name of the file to write.
@@ -90,17 +90,17 @@ class ORCACalculator:
             The directory where to write
         """
         with open(os.path.join(directory, file_name), "w") as f:
-            f.write(f"{len(external_potentials)}\n")
+            f.write(f"{external_potentials.size(0)}\n")
             for charge, x, y, z in external_potentials:
-                f.write(f"{charge} {x} {y} {z}\n")
+                f.write(f"{charge.item()} {x.item()} {y.item()} {z.item()}\n")
 
     def get_potential_energy(
         self,
         elements: list[str],
-        positions: np.ndarray,
+        positions: torch.Tensor,
         orca_simple_input: str = "! b3lyp cc-pvtz TightSCF NoFrozenCore KeepDens",
-        orca_blocks: str = "%pal nprocs 16 end",
-        orca_external_potentials: np.ndarray = None,
+        orca_blocks: str = "%pal nprocs 1 end",
+        orca_external_potentials: torch.Tensor = None,
         charge: int = 0,
         multiplicity: int = 1,
         input_file_name: str = "orca.inp",
@@ -135,13 +135,13 @@ class ORCACalculator:
 
         return self.read_single_point_energy(output_file_name, directory)
 
-    def write_mesh(self, mesh: np.ndarray, file_name: str, directory: str):
+    def write_mesh(self, mesh: torch.Tensor, file_name: str, directory: str):
         """
         Write the mesh in Bohr to a file.
 
         Parameters
         ----------
-        mesh: np.ndarray
+        mesh: torch.Tensor
             The mesh in Angstrom.
         file_name: str
             The name of the file to write.
@@ -150,19 +150,19 @@ class ORCACalculator:
         """
         mesh_in_bohr = mesh * ANGSTROM_TO_BOHR
         with open(os.path.join(directory, file_name), "w") as f:
-            f.write(f"{len(mesh)}\n")
+            f.write(f"{mesh.size(0)}\n")
             for x, y, z in mesh_in_bohr:
-                f.write(f"{x} {y} {z}\n")
+                f.write(f"{x.item()} {y.item()} {z.item()}\n")
 
     def get_vpot(
-        self, mesh: np.ndarray, directory: str, output_file_name: str = "vpot.out"
-    ) -> np.ndarray:
+        self, mesh: torch.Tensor, directory: str, output_file_name: str = "vpot.out"
+    ) -> torch.Tensor:
         """
         Get the vpot from ORCA.
 
         Parameters
         ----------
-        mesh: np.ndarray (N, 3)
+        mesh: torch.Tensor (N, 3)
             The mesh in Angstrom.
         directory: str
             The directory where to write the files.
@@ -171,7 +171,7 @@ class ORCACalculator:
 
         Returns
         -------
-        np.ndarray (N,)
+        torch.Tensor (N,)
             The vpot values in Hartree.
         """
         self.write_mesh(mesh, "orca.vpot.xyz", directory)
@@ -182,12 +182,30 @@ class ORCACalculator:
             directory,
         )
         return self.read_vpot(self._ORCA_VPOT_OUT, directory)
+    
+    def get_mkl(self, directory: str, output_file_name: str = "orca_2mkl.out") -> None:
+        """
+        Get the mkl from ORCA.
 
-    def read_vpot(self, output_file_name: str, directory: str) -> np.ndarray:
+        Parameters
+        ----------
+        directory: str
+            The directory where to write the files.
+        output_file_name: str
+            The name of the output file.
+        """
+        self.run_orca(
+            "orca_2mkl",
+            ["b3lyp", "-molden"],
+            output_file_name,
+            directory,
+        )
+
+    def read_vpot(self, output_file_name: str, directory: str) -> torch.Tensor:
         """
         Read the vpot from the ORCA output file.
         """
-        return np.loadtxt(os.path.join(directory, output_file_name), skiprows=1)[:, 3]
+        return torch.tensor(np.loadtxt(os.path.join(directory, output_file_name), skiprows=1)[:, 3])
 
     def read_single_point_energy(self, output_file_name: str, directory: str) -> float:
         """
@@ -230,7 +248,7 @@ class ORCACalculator:
 
 
 if __name__ == "__main__":
-    import numpy as np
+    import torch
 
     orca = ORCACalculator(orca_home="/home/joaomorado/orca")
 
@@ -238,7 +256,7 @@ if __name__ == "__main__":
     elements = ["C", "C", "C", "C", "C", "C", "H", "H", "H", "H", "H", "H"]
 
     # Define positions in Angstrom
-    pos = np.asarray(
+    pos = torch.tensor(
         [
             [17.666, 16.280, 18.146],
             [17.596, 17.503, 18.812],
@@ -258,4 +276,4 @@ if __name__ == "__main__":
     # Vacuum energy
     en = orca.get_potential_energy(elements=elements, positions=pos, directory="vacuum")
 
-    assert np.isclose(en, -232.159529305631, atol=1e-7)
+    assert torch.isclose(torch.tensor(en), torch.tensor(-232.159529305631), atol=1e-7)
