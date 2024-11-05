@@ -67,6 +67,17 @@ class ReferenceDataCalculator:
         self._ref_charges_mm = []
         self._ref_atomic_numbers = []
 
+        self._reference_data = {
+            "atomic_numbers": [],
+            "xyz_qm": [],
+            "s": [],
+            "q_core": [],
+            "q_val": [],
+            "alpha": [],
+            "xyz_mm": [],
+            "charges_mm": [],
+        }
+
         # Device and dtype
         self._dtype = dtype
         self._device = device
@@ -227,7 +238,7 @@ class ReferenceDataCalculator:
         """
         if calc_polarizability or calc_horton:
             calc_static = True
-
+        print("Sampling...")
         # Integrate for a given number of steps
         self._integrator.step(steps)
 
@@ -293,6 +304,11 @@ class ReferenceDataCalculator:
                 directory="vacuum",
             )
 
+        else:
+            s = None
+            q_core = None
+            q_val = None
+
         if calc_induction:
             charges_mm = self._point_charges[~molecule_mask][R_cutoff]
             external_potentials = _torch.hstack(
@@ -309,10 +325,14 @@ class ReferenceDataCalculator:
             e_ind = e_int - e_static
 
         # Add the reference data to the lists
-        self._ref_pos_qm.append(pos_qm)
-        self._ref_pos_mm.append(pos_mm)
-        self._ref_charges_mm.append(charges_mm)
-        self._ref_atomic_numbers.append(z_qm)
+        self._reference_data["atomic_numbers"].append(z_qm)
+        self._reference_data["xyz_qm"].append(pos_qm)
+        self._reference_data["s"].append(None)
+        self._reference_data["q_core"].append(None)
+        self._reference_data["q_val"].append(None)
+        self._reference_data["alpha"].append(None)
+        self._reference_data["xyz_mm"].append(pos_mm)
+        self._reference_data["charges_mm"].append(charges_mm)
 
         return e_static, e_ind, vacuum_energy, vacuum_pot, pos_qm, pos_mm
 
@@ -344,22 +364,21 @@ if __name__ == "__main__":
         ewaldErrorTolerance=0.0005,
     )
     potential = MLPotential("ani2x")
-
     # Choose the ML atoms
-    mlAtoms = [a.index for a in next(prmtop.topology.chains()).atoms()]
+    mlAtoms = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 
     # Create the mixed ML/MM system (we're using the nnpops implementation for performance)
     mixedSystem = potential.createMixedSystem(
         prmtop.topology, mmSystem, mlAtoms, interpolate=False, implementation="nnpops"
     )
-
+    print("System created...")
     # Choose to run on a GPU (CUDA), with the LangevinMiddleIntegrator (NVT) and create the context
     platform = mm.Platform.getPlatformByName("CUDA")
     integrator = mm.LangevinMiddleIntegrator(
         300 * unit.kelvin, 1 / unit.picosecond, 0.001 * unit.picoseconds
     )
     context = mm.Context(mixedSystem, integrator, platform)
-
+    print("Context created...")
     ref_calculator = ReferenceDataCalculator(
         system=mixedSystem,
         context=context,
@@ -374,5 +393,5 @@ if __name__ == "__main__":
     )
 
     context.setPositions(inpcrd.positions)
-
+    print("Starting sampling...")
     ref_calculator.sample(10)
