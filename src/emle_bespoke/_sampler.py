@@ -251,6 +251,9 @@ class ReferenceDataCalculator:
         e_static: float
             Static energy from the QM/MM calculation.
         """
+        if calc_polarizability or calc_horton:
+            calc_static = True
+
         # Integrate for a given number of steps
         self._integrator.step(steps)
 
@@ -288,22 +291,30 @@ class ReferenceDataCalculator:
         symbols = symbols_qm + symbols_mm
 
 
-        if calc_static or calc_polarizability:
-
-            vacuum_energy = self._qm_calculator.get_potential_energy(
+        orca_blocks = "%MaxCore 1024\n%pal\nnprocs 1\nend\n"
+        if calc_polarizability:
+            orca_blocks += "%elprop\n    Polar 1\ndipole true\nquadrupole true\nend\n"
+        
+        vacuum_energy = self._qm_calculator.get_potential_energy(
                 elements=symbols,
                 positions=pos_qm,
                 directory="vacuum",
-            )
+                orca_blocks=orca_blocks,)
+        
+        
+
+
+
+
+
 
             
-    
+        """
         if calc_induction:
             # Get the point charges and construct the external potential tensor
             charges_mm = self._point_charges[~molecule_mask][R_cutoff]
             external_potentials = _torch.hstack([_torch.unsqueeze(charges_mm, dim=1), pos_mm])
-
-        if 
+        """
 
         """
         # Write the XYZ file
@@ -365,7 +376,7 @@ if __name__ == "__main__":
     import openmm.unit as unit
     from openmmml import MLPotential
     from sys import stdout
-    from .parsers import OrcaParser as _OrcaParser
+    from .parsers import ORCACalculator as _ORCACalculator
     # Load PDB file and set the FFs
     pdb = app.PDBFile('alanine-dipeptide-explicit.pdb')
     ff = app.ForceField('amber14-all.xml', 'amber14/tip3pfb.xml')
@@ -390,7 +401,7 @@ if __name__ == "__main__":
         context=context,
         integrator=integrator,
         topology=pdb.topology,
-        qm_calculator=None,
+        qm_calculator=_ORCACalculator(),
         qm_region=mlAtoms,
         energy_scale=_HARTREE_TO_KJ_MOL,
         length_scale=1.0,
