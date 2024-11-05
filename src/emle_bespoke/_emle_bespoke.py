@@ -1,11 +1,8 @@
-from emle.train import EMLETrainer as _EMLETrainer
+# from emle.train import EMLETrainer as _EMLETrainer
 from emle.models import EMLEBase as _EMLEBase
+
+from ._sampler import ReferenceDataCalculator as _ReferenceDataCalculator
 import torch as _torch
-
-
-
-
-
 
 class EMLEBespoke:
     """Class to train bespoke EMLE models."""
@@ -54,4 +51,16 @@ class EMLEBespoke:
         )
 
         return trainer
+
+    def run(n_samples, n_steps):
+        """
+        
+        
+        """
+        ref_calculator = _ReferenceDataCalculator()
+
+        for i in(n_samples):
+            ref_calculator.sample(n_steps)
+
+        train
 

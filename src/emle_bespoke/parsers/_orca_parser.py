@@ -32,6 +32,30 @@ class ORCACalculator:
     ) -> str:
         """
         Write the ORCA input file.
+
+        Parameters
+        ----------
+        elements: list[str]
+            The list of elements.
+        positions: np.ndarray
+            The positions of the atoms.
+        orca_simple_input: str
+            The simple input for ORCA.
+        orca_blocks: str
+            The blocks for ORCA.
+        charge: int
+            The charge of the molecule.
+        multiplicity: int
+            The multiplicity of the molecule.
+        input_file_name: str
+            The name of the input file.
+        directory: str
+            The directory where to write the file.
+
+        Returns
+        -------
+        str
+            The input file
         """
         os.makedirs(directory, exist_ok=True)
 
@@ -52,9 +76,18 @@ class ORCACalculator:
         external_potentials: np.ndarray,
         file_name: str = "pointcharges.pc",
         directory: str = ".",
-    ):
+    ) -> None:
         """
         Write the external potentials to a file.
+
+        Parameters
+        ----------
+        external_potentials: np.ndarray
+            The external potentials in the format (charge, x, y, z).
+        file_name: str
+            The name of the file to write.
+        directory: str
+            The directory where to write
         """
         with open(os.path.join(directory, file_name), "w") as f:
             f.write(f"{len(external_potentials)}\n")
