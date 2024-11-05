@@ -1,3 +1,3 @@
-from ._orca_parser import OrcaParser
+from ._orca_parser import ORCACalculator
 
-__all__ = ["OrcaParser"]
+__all__ = ["OrcaCalculator"]
