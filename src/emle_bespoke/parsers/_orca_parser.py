@@ -182,7 +182,7 @@ class ORCACalculator:
             directory,
         )
         return self.read_vpot(self._ORCA_VPOT_OUT, directory)
-    
+
     def get_mkl(self, directory: str, output_file_name: str = "orca_2mkl.out") -> None:
         """
         Get the mkl from ORCA.
@@ -205,7 +205,13 @@ class ORCACalculator:
         """
         Read the vpot from the ORCA output file.
         """
-        return torch.tensor(np.loadtxt(os.path.join(directory, output_file_name), skiprows=1)[:, 3])
+        vpot_values = []
+        with open(os.path.join(directory, output_file_name), "r") as f:
+            lines = f.readlines()[1:]
+            for line in lines:
+                vpot_values.append(float(line.split()[3]))
+
+        return torch.tensor(vpot_values)
 
     def read_single_point_energy(self, output_file_name: str, directory: str) -> float:
         """
