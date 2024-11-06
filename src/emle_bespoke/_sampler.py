@@ -1,9 +1,8 @@
 import logging as _logging
 import time
-from typing import Tuple
 
-import numpy as np
-import openmm.unit as unit
+import openmm as _mm
+import openmm.unit as _unit
 import torch as _torch
 
 from ._constants import ATOMIC_NUMBERS_TO_SYMBOLS as _ATOMIC_NUMBERS_TO_SYMBOLS
@@ -12,7 +11,7 @@ from ._constants import HARTREE_TO_KJ_MOL as _HARTREE_TO_KJ_MOL
 _logger = _logging.getLogger(__name__)
 
 
-class ReferenceDataCalculator:
+class ReferenceDataSampler:
     """
     Class to calculate the reference QM(/MM) data.
 
@@ -41,7 +40,7 @@ class ReferenceDataCalculator:
         qm_region,
         qm_calculator,
         horton_calculator=None,
-        energy_scale=_HARTREE_TO_KJ_MOL,
+        energy_scale=1.0,
         length_scale=1.0,
         dtype=_torch.float64,
         device=_torch.device("cuda"),
@@ -67,18 +66,13 @@ class ReferenceDataCalculator:
         self._length_scale = length_scale
 
         # Reference data lists
-        self._ref_pos_qm = []
-        self._ref_pos_mm = []
-        self._ref_charges_mm = []
-        self._ref_atomic_numbers = []
-
         self._reference_data = {
-            "atomic_numbers": [],
+            "z": [],
             "xyz_qm": [],
             "s": [],
-            "v": [],
+            "mu": [],
             "q_core": [],
-            "q": [],
+            "q_val": [],
             "alpha": [],
             "xyz_mm": [],
             "charges_mm": [],
@@ -106,7 +100,7 @@ class ReferenceDataCalculator:
         point_charges: _torch.Tensor(NATOMS)
         """
         non_bonded_force = [
-            f for f in self._system.getForces() if isinstance(f, mm.NonbondedForce)
+            f for f in self._system.getForces() if isinstance(f, _mm.NonbondedForce)
         ][0]
         point_charges = _torch.zeros(
             self._topology.getNumAtoms(), dtype=_torch.float64, device=self._device
@@ -134,15 +128,11 @@ class ReferenceDataCalculator:
         positions: _torch.Tensor(NATOMS, 3)
             Wrapped atomic positions.
         """
-        positions = positions - _torch.outer(
-            _torch.floor(positions[:, 2] / boxvectors[2, 2]), boxvectors[2]
-        )
-        positions = positions - _torch.outer(
-            _torch.floor(positions[:, 1] / boxvectors[1, 1]), boxvectors[1]
-        )
-        positions = positions - _torch.outer(
-            _torch.floor(positions[:, 0] / boxvectors[0, 0]), boxvectors[0]
-        )
+        for i in range(3):
+            positions = positions - _torch.outer(
+                _torch.floor(positions[:, i] / boxvectors[i, i]), boxvectors[i]
+            )
+
         return positions
 
     def _center_molecule(
@@ -226,11 +216,22 @@ class ReferenceDataCalculator:
             for element, position in zip(elements, positions):
                 f.write(f"{element} {position[0]} {position[1]} {position[2]}\n")
 
+    def write_reference_data(self, filename: str) -> None:
+        """
+        Write the reference data to a file.
+
+        Parameters
+        ----------
+        filename: str
+            Filename.
+        """
+        pass
+
     def sample(
         self,
         steps: int,
         calc_static: bool = True,
-        calc_induction: bool = True,
+        calc_induction: bool = False,
         calc_horton: bool = True,
         calc_polarizability: bool = True,
     ) -> dict:
@@ -248,23 +249,20 @@ class ReferenceDataCalculator:
         e_static: float
             Static energy from the QM/MM calculation.
         """
-        _logger.info(
-            f"Sampling new configuration. Number of integration steps: {steps}"
-        )
-        if calc_polarizability or calc_horton:
-            calc_static = True
-
         assert (
             self._horton_calculator is not None if calc_horton else True
         ), "The horton calculator must be provided if the horton partitioning is to be calculated."
+
+        _logger.debug("Sampling a new configuration.")
+        _logger.debug(f"Number of integration steps: {steps}")
 
         # Integrate for a given number of steps
         self._integrator.step(steps)
 
         # Get the positions, box vectors, and energy before EMLE to ensure correct positions
         state = self._context.getState(getPositions=True, getEnergy=True)
-        positions = state.getPositions(asNumpy=True).value_in_unit(unit.angstrom)
-        pbc = state.getPeriodicBoxVectors(asNumpy=True).value_in_unit(unit.angstrom)
+        positions = state.getPositions(asNumpy=True).value_in_unit(_unit.angstrom)
+        pbc = state.getPeriodicBoxVectors(asNumpy=True).value_in_unit(_unit.angstrom)
 
         # Convert the positions and box vectors to torch tensors
         pos = _torch.from_numpy(positions).to(self._device, dtype=self._dtype)
@@ -293,19 +291,20 @@ class ReferenceDataCalculator:
 
         # Get the atomic symbols
         symbols_qm = [_ATOMIC_NUMBERS_TO_SYMBOLS[an.item()] for an in z_qm]
-        symbols_mm = [_ATOMIC_NUMBERS_TO_SYMBOLS[an.item()] for an in z_mm]
-        symbols = symbols_qm + symbols_mm
+        # symbols_mm = [_ATOMIC_NUMBERS_TO_SYMBOLS[an.item()] for an in z_mm]
+        # symbols = symbols_qm + symbols_mm
 
         # Define the directory for vacuum calculations and QM/MM calculations
         directory_vacuum = "vacuum"
         directory_pc = "pc"
 
-        orca_blocks = "%MaxCore 1024\n%pal\nnprocs 1\nend\n"
+        orca_blocks = "%MaxCore 1024\n%pal\nnprocs 16\nend\n"
         if calc_polarizability:
-            _logger.info("Adding the polarizability block to the ORCA input...")
+            _logger.debug("Adding the polarizability block to the ORCA input.")
             orca_blocks += "%elprop\nPolar 1\ndipole true\nquadrupole true\nend\n"
 
         # Run the single point QM energy calculation
+        _logger.debug("Running the single point QM energy calculation...")
         vacuum_energy = self._qm_calculator.get_potential_energy(
             elements=symbols_qm,
             positions=pos_qm,
@@ -314,7 +313,7 @@ class ReferenceDataCalculator:
         )
 
         if calc_static:
-            _logger.info("Calculating the static energy...")
+            _logger.debug("Getting the static energy...")
             vacuum_pot = self._qm_calculator.get_vpot(
                 mesh=pos_mm,
                 directory=directory_vacuum,
@@ -327,7 +326,7 @@ class ReferenceDataCalculator:
             e_static = None
 
         if calc_polarizability:
-            _logger.info("Calculating the polarizability...")
+            _logger.debug("Getting the polarizability...")
             polarizability = self._qm_calculator.get_polarizability(
                 directory=directory_vacuum,
             )
@@ -335,7 +334,7 @@ class ReferenceDataCalculator:
             polarizability = None
 
         if calc_horton:
-            _logger.info("Calculating the horton partitioning...")
+            _logger.debug("Getting the horton partitioning...")
             self._qm_calculator.get_mkl(
                 directory=directory_vacuum,
             )
@@ -352,10 +351,14 @@ class ReferenceDataCalculator:
                 "q_core": None,
                 "q_val": None,
                 "alpha": None,
+                "mu": None,
             }
 
+
+        charges_mm = self._point_charges[~molecule_mask][R_cutoff]
+
         if calc_induction:
-            charges_mm = self._point_charges[~molecule_mask][R_cutoff]
+            _logger.info("Getting the induction energy...")
             external_potentials = _torch.hstack(
                 [_torch.unsqueeze(charges_mm, dim=1), pos_mm]
             )
@@ -372,81 +375,16 @@ class ReferenceDataCalculator:
             e_ind = None
 
         # Add the reference data to the lists
-        self._reference_data["atomic_numbers"].append(z_qm)
+        self._reference_data["z"].append(z_qm)
         self._reference_data["xyz_qm"].append(pos_qm)
-        self._reference_data["s"].append(horton_data["s"])
-        self._reference_data["q_core"].append(horton_data["q_core"])
-        self._reference_data["q"].append(horton_data["q"])
-
         self._reference_data["alpha"].append(polarizability)
         self._reference_data["xyz_mm"].append(pos_mm)
         self._reference_data["charges_mm"].append(charges_mm)
-
+        self._reference_data["s"].append(horton_data["s"])
+        self._reference_data["mu"].append(horton_data["mu"])
+        self._reference_data["q_core"].append(horton_data["q_core"])
+        self._reference_data["q_val"].append(horton_data["q_val"])
         self._reference_data["e_static"].append(e_static)
         self._reference_data["e_ind"].append(e_ind)
 
         return self._reference_data
-
-
-if __name__ == "__main__":
-    from sys import stdout
-
-    import openmm as mm
-    import openmm.app as app
-    import openmm.unit as unit
-    from openmmml import MLPotential
-
-    from .calculators import HortonCalculator, ORCACalculator
-
-    # Load PDB file and set the FFs
-    prmtop = app.AmberPrmtopFile(
-        "/home/joaomorado/repos/emle-bespoke/src/benzene_sage_water.prm7"
-    )
-    inpcrd = app.AmberInpcrdFile(
-        "/home/joaomorado/repos/emle-bespoke/src/benzene_sage_water.rst7"
-    )
-
-    # Create the OpenMM MM System and ML potential
-    mmSystem = prmtop.createSystem(
-        nonbondedMethod=app.PME,
-        nonbondedCutoff=1.0 * unit.nanometers,
-        constraints=app.HBonds,
-        rigidWater=True,
-        ewaldErrorTolerance=0.0005,
-    )
-    potential = MLPotential("ani2x")
-    # Choose the ML atoms
-    mlAtoms = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
-
-    # Create the mixed ML/MM system (we're using the nnpops implementation for performance)
-    mixedSystem = potential.createMixedSystem(
-        prmtop.topology, mmSystem, mlAtoms, interpolate=False, implementation="nnpops"
-    )
-    print("System created...")
-    # Choose to run on a GPU (CUDA), with the LangevinMiddleIntegrator (NVT) and create the context
-    platform = mm.Platform.getPlatformByName("CUDA")
-    integrator = mm.LangevinMiddleIntegrator(
-        300 * unit.kelvin, 1 / unit.picosecond, 0.001 * unit.picoseconds
-    )
-    context = mm.Context(mixedSystem, integrator, platform)
-    print("Context created...")
-    ref_calculator = ReferenceDataCalculator(
-        system=mixedSystem,
-        context=context,
-        integrator=integrator,
-        topology=prmtop.topology,
-        qm_calculator=ORCACalculator(),
-        horton_calculator=HortonCalculator(),
-        qm_region=mlAtoms,
-        energy_scale=_HARTREE_TO_KJ_MOL,
-        length_scale=1.0,
-        dtype=_torch.float64,
-        device=_torch.device("cuda"),
-    )
-
-    context.setPositions(inpcrd.positions)
-    print("Starting sampling...")
-    ref_data = ref_calculator.sample(10)
-    # print data type of every value in ref_data
-    for key, value in ref_data.items():
-        print(f"{key}: {type(value)}")
