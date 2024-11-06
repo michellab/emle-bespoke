@@ -7,6 +7,7 @@ import torch as _torch
 
 from ._constants import ATOMIC_NUMBERS_TO_SYMBOLS as _ATOMIC_NUMBERS_TO_SYMBOLS
 from ._constants import HARTREE_TO_KJ_MOL as _HARTREE_TO_KJ_MOL
+from ._constants import ANGSTROM_TO_BOHR as _ANGSTROM_TO_BOHR
 
 _logger = _logging.getLogger(__name__)
 
@@ -39,6 +40,7 @@ class ReferenceDataSampler:
         topology,
         qm_region,
         qm_calculator,
+        cutoff=12.0,
         horton_calculator=None,
         energy_scale=1.0,
         length_scale=1.0,
@@ -49,7 +51,7 @@ class ReferenceDataSampler:
         self._context = context
         self._integrator = integrator
         self._topology = topology
-        self._cutoff = 12.0
+        self._cutoff = cutoff
         self._atomic_numbers = _torch.tensor(
             [a.element.atomic_number for a in topology.atoms()],
             dtype=_torch.int64,
@@ -216,17 +218,45 @@ class ReferenceDataSampler:
             for element, position in zip(elements, positions):
                 f.write(f"{element} {position[0]} {position[1]} {position[2]}\n")
 
-    def write_reference_data(self, filename: str) -> None:
+    def write_data(self, filename: str) -> None:
         """
-        Write the reference data to a file.
+        Write the reference data to a file in pickle format.
 
         Parameters
         ----------
         filename: str
             Filename.
         """
-        pass
+        import pickle
+        with open(filename, "wb") as f:
+            pickle.dump(self._reference_data, f)
 
+    def read_data(self, filename: str, overwrite=True) -> dict:
+        """
+        Read the reference data from a file in pickle format.
+
+        Parameters
+        ----------
+        filename: str
+            Filename.
+        overwrite: bool
+            Overwrite the current reference data.
+
+        Returns
+        -------
+        reference_data: dict
+            Reference data.
+        """
+        import pickle
+        with open(filename, "rb") as f:
+            data = pickle.load(f)
+            if overwrite or not self._reference_data:
+                self._reference_data = data
+            else:
+                for key in self._reference_data.keys():
+                    self._reference_data[key].extend(data[key])
+        return self._reference_data    
+        
     def sample(
         self,
         steps: int,
@@ -354,7 +384,6 @@ class ReferenceDataSampler:
                 "mu": None,
             }
 
-
         charges_mm = self._point_charges[~molecule_mask][R_cutoff]
 
         if calc_induction:
@@ -363,7 +392,7 @@ class ReferenceDataSampler:
                 [_torch.unsqueeze(charges_mm, dim=1), pos_mm]
             )
             qm_mm_energy = self._qm_calculator.get_potential_energy(
-                elements=symbols,
+                elements=symbols_qm,
                 positions=pos_qm,
                 orca_external_potentials=external_potentials,
                 directory=directory_pc,
@@ -376,9 +405,9 @@ class ReferenceDataSampler:
 
         # Add the reference data to the lists
         self._reference_data["z"].append(z_qm)
-        self._reference_data["xyz_qm"].append(pos_qm)
+        self._reference_data["xyz_qm"].append(pos_qm * _ANGSTROM_TO_BOHR)
         self._reference_data["alpha"].append(polarizability)
-        self._reference_data["xyz_mm"].append(pos_mm)
+        self._reference_data["xyz_mm"].append(pos_mm * _ANGSTROM_TO_BOHR)
         self._reference_data["charges_mm"].append(charges_mm)
         self._reference_data["s"].append(horton_data["s"])
         self._reference_data["mu"].append(horton_data["mu"])
