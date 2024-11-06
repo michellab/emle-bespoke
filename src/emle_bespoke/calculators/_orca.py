@@ -43,15 +43,14 @@ class ORCACalculator(BaseCalculator):
         self._orca_home = orca_home or _os.environ.get("ORCA_HOME")
         if not self._orca_home:
             raise ValueError("ORCA_HOME is not set.")
-        
+
     @property
     def name_prefix(self):
         return self._name_prefix
-    
+
     @name_prefix.setter
     def name_prefix(self, value):
         self._name_prefix = value
-
 
     # -------------------------------------------------------------------------------------------- #
     #                                                                                              #
@@ -70,7 +69,7 @@ class ORCACalculator(BaseCalculator):
                 vpot_values.append(float(line.split()[3]))
 
         return _torch.tensor(vpot_values)
-    
+
     @staticmethod
     def read_single_point_energy(output_file_name: str, directory: str) -> float:
         """
@@ -90,7 +89,6 @@ class ORCACalculator(BaseCalculator):
 
         raise ValueError("Single point energy not found in the output file.")
 
-    
     @staticmethod
     def read_polarizability(output_file_name: str, directory: str) -> _torch.Tensor:
         """
@@ -102,7 +100,6 @@ class ORCACalculator(BaseCalculator):
             with open(file_path, "r") as f:
                 for line in f:
                     if "THE POLARIZABILITY TENSOR" in line:
-                        print("FOUND *****")
                         for _ in range(3):
                             next(f)
 
@@ -193,7 +190,6 @@ class ORCACalculator(BaseCalculator):
             for charge, x, y, z in external_potentials:
                 f.write(f"{charge.item()} {x.item()} {y.item()} {z.item()}\n")
 
-
     @staticmethod
     def write_mesh(mesh: _torch.Tensor, file_name: str, directory: str):
         """
@@ -216,7 +212,7 @@ class ORCACalculator(BaseCalculator):
 
     # -------------------------------------------------------------------------------------------- #
     #                                                                                              #
-    #                                      ORCA CALCULATIONS                                       # 
+    #                                      ORCA CALCULATIONS                                       #
     #                                                                                              #
     # -------------------------------------------------------------------------------------------- #
     def get_potential_energy(
@@ -245,7 +241,7 @@ class ORCACalculator(BaseCalculator):
             The simple input for ORCA.
         orca_blocks: str
             The blocks for ORCA.
-        orca_external_potentials: torch.Tensor 
+        orca_external_potentials: torch.Tensor
             The external potentials in the format (charge, x, y, z).
         charge: int
             The charge of the molecule.
@@ -287,7 +283,12 @@ class ORCACalculator(BaseCalculator):
                 directory=directory,
             )
 
-        self._run_process(_os.path.join(self._orca_home, self._ORCA_BIN), [input_file_name], output_file_name, directory)
+        self._run_process(
+            _os.path.join(self._orca_home, self._ORCA_BIN),
+            [input_file_name],
+            output_file_name,
+            directory,
+        )
 
         sp_energy = self.read_single_point_energy(output_file_name, directory)
 
@@ -297,7 +298,7 @@ class ORCACalculator(BaseCalculator):
         self, mesh: _torch.Tensor, directory: str, output_file_name: str = "vpot.out"
     ) -> _torch.Tensor:
         """
-        Get the vpot from ORCA. 
+        Get the vpot from ORCA.
 
         Parameters
         ----------
@@ -312,7 +313,7 @@ class ORCACalculator(BaseCalculator):
         -------
         torch.Tensor (N,)
             The vpot values in Hartree.
-        """ 
+        """
         self.write_mesh(mesh, f"{self._name_prefix}.vpot.xyz", directory)
         self._run_process(
             _os.path.join(self._orca_home, self._ORCA_VPOT_BIN),
@@ -346,7 +347,9 @@ class ORCACalculator(BaseCalculator):
             directory,
         )
 
-    def get_polarizability(self, directory: str, output_file_name: Union[str, None] = None) -> _torch.tensor:
+    def get_polarizability(
+        self, directory: str, output_file_name: Union[str, None] = None
+    ) -> _torch.tensor:
         """
         Read the polarizabilities from the ORCA output file.
 
@@ -354,6 +357,7 @@ class ORCACalculator(BaseCalculator):
         """
         output_file_name = output_file_name or f"{self._name_prefix}.out"
         return self.read_polarizability(output_file_name, directory)
+
 
 if __name__ == "__main__":
     import torch

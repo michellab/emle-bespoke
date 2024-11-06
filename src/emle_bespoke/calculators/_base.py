@@ -1,13 +1,15 @@
 """Base class for calculators."""
-import subprocess as _subprocess
 import shutil as _shutil
+import subprocess as _subprocess
 from pathlib import Path as _Path
+
 
 class BaseCalculator:
     """Base calculator class."""
+
     def _run_process(
         self, bin_exec: str, arguments: list[str], output_file_name: str, directory: str
-    ) -> _subprocess.CalledProcessError:
+    ) -> _subprocess.CompletedProcess:
         """
         Run a binary with the given arguments and capture the output in a specified file.
 
@@ -40,7 +42,7 @@ class BaseCalculator:
 
         bin_path = _Path(full_path)
         output_path = _Path(directory) / output_file_name
-   
+
         if not bin_path.is_file():
             raise FileNotFoundError(f"{bin_path} binary does not exist.")
 
@@ -54,7 +56,7 @@ class BaseCalculator:
                     text=True,
                     stdout=output_file,
                     stderr=_subprocess.STDOUT,
-                    check=True 
+                    check=True,
                 )
         except _subprocess.CalledProcessError as e:
             raise _subprocess.CalledProcessError(
@@ -63,18 +65,17 @@ class BaseCalculator:
 
         return process
 
-    
     def get_potential_energy(self, *args, **kwargs):
         raise NotImplementedError("get_potential_energy method must be implemented.")
-    
+
     def get_vpot(self, *args, **kwargs):
         raise NotImplementedError("get_vpot method must be implemented.")
-    
+
     def get_mkl(self, *args, **kwargs):
         raise NotImplementedError("get_mkl method must be implemented.")
-    
+
     def get_horton_partitioning(self, *args, **kwargs):
         raise NotImplementedError("get_horton_partitioning method must be implemented.")
-    
+
     def get_polarizabilities(self, *args, **kwargs):
         raise NotImplementedError("get_polarizabilities method must be implemented.")
