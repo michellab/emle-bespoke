@@ -218,7 +218,7 @@ class ReferenceDataSampler:
             for element, position in zip(elements, positions):
                 f.write(f"{element} {position[0]} {position[1]} {position[2]}\n")
 
-    def write_data(self, filename: str) -> None:
+    def write_data(self, filename: str = "ref_data.pkl") -> None:
         """
         Write the reference data to a file in pickle format.
 
@@ -228,10 +228,11 @@ class ReferenceDataSampler:
             Filename.
         """
         import pickle
+        _logger.debug(f"Writing the reference data to {filename}.")
         with open(filename, "wb") as f:
             pickle.dump(self._reference_data, f)
 
-    def read_data(self, filename: str, overwrite=True) -> dict:
+    def read_data(self, filename: str = "ref_data.pkl", overwrite: bool = True) -> dict:
         """
         Read the reference data from a file in pickle format.
 
@@ -248,6 +249,7 @@ class ReferenceDataSampler:
             Reference data.
         """
         import pickle
+        _logger.debug(f"Reading the reference data from {filename} with overwrite set to {overwrite}.")
         with open(filename, "rb") as f:
             data = pickle.load(f)
             if overwrite or not self._reference_data:
