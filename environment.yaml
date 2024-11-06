@@ -1,34 +1,21 @@
-name: fes-ml
+name: emle-bespoke
 
 channels:
   - conda-forge
-  - openbiosim/label/emle
 
 dependencies:
-  - ambertools
-  - ase
-  - compilers
+  - python
+  - pip
+  - numpy
+  - h5py
   - cudatoolkit<11.9
-  - deepmd-kit
-  - eigen
-  - loguru
   - openmm>=8.1
   - openmm-torch
+  - openmm-ml
   - openmmforcefields
-  - openff-toolkit
-  - openff-interchange
   - nnpops
-  - pip
-  - pybind11
-  - pytorch<3.11
-  - python
-  - pyyaml
-  - sire
+  - pytorch
   - torchani
-  - xtb-python
   - pip:
-    - git+https://github.com/lab-cosmo/librascal.git
-    - git+https://github.com/chemle/emle-engine.git@main
-    - git+https://github.com/openmm/openmm-ml.git
+    - git+https://github.com/chemle/emle-engine.git
     - coloredlogs
-    - mace-torch
