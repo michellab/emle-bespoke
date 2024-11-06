@@ -25,6 +25,12 @@ class HortonCalculator(BaseCalculator):
 
     _NAME_PREFIX = "horton"
     _HORTON_WPART_BIN = "horton-wpart.py"
+    _HORTON_KEYS = (
+        "cartesian_multipoles",
+        "core_charges",
+        "valence_charges",
+        "valence_widths",
+    )
 
     def __init__(self, name_prefix: Union[str, None] = None):
         self._name_prefix = name_prefix or self._NAME_PREFIX
@@ -85,14 +91,16 @@ class HortonCalculator(BaseCalculator):
             The data from the output file.
         """
         with _h5py.File(output_file, "r") as f:
-            q_shift = _np.mean(f["cartesian_multipoles"][:, 0])
+            data = {key: f[key][:] for key in self._HORTON_KEYS}
+            q = data["core_charges"] + data["valence_charges"]
+            q_shift = (_np.round(q) - q) / len(q)
 
-            return {
-                "s": _torch.tensor(f["valence_widths"][:]),
-                "q_core": _torch.tensor(f["core_charges"][:]),
-                "q": _torch.tensor(f["cartesian_multipoles"][:, 0] - q_shift),
-                "v": _torch.tensor(f["radial_moments"][:, 3]),
-            }
+        return {
+            "s": data["valence_widths"],
+            "q_core": data["core_charges"],
+            "q_val": data["valence_charges"] + q_shift,
+            "mu": data["cartesian_multipoles"][:, 1:4],
+        }
 
     def _run_horton_wpart(
         self,

@@ -3,7 +3,7 @@ from typing import Union
 
 import torch as _torch
 
-from .._constants import ANGSTROM_TO_BOHR
+from .._constants import ANGSTROM_TO_BOHR, HARTREE_TO_KJ_MOL
 from ._base import BaseCalculator
 
 
@@ -290,7 +290,7 @@ class ORCACalculator(BaseCalculator):
             directory,
         )
 
-        sp_energy = self.read_single_point_energy(output_file_name, directory)
+        sp_energy = self.read_single_point_energy(output_file_name, directory) * HARTREE_TO_KJ_MOL
 
         return sp_energy
 
