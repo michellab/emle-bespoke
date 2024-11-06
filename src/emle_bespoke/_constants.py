@@ -1,6 +1,6 @@
+"""Module for storing constants used in the emle_bespoke package."""
 ANGSTROM_TO_BOHR = 1.8897259886
 HARTREE_TO_KJ_MOL = 2625.5002
-
 
 ATOMIC_NUMBERS_TO_SYMBOLS = {
     1: "H",
