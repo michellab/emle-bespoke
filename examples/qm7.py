@@ -1,10 +1,10 @@
 import io
 import tarfile
-import torch
+
 import h5py
 import numpy as np
 import scipy.io
-
+import torch
 from emle.models import EMLEBase
 from emle.train import EMLETrainer
 
