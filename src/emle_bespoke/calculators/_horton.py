@@ -93,13 +93,13 @@ class HortonCalculator(BaseCalculator):
         with _h5py.File(output_file, "r") as f:
             data = {key: f[key][:] for key in self._HORTON_KEYS}
             q = data["core_charges"] + data["valence_charges"]
-            q_shift = (_np.round(q) - q) / len(q)
+            q_shift = _np.sum(_np.round(q) - q) / len(q)
 
         return {
-            "s": data["valence_widths"],
-            "q_core": data["core_charges"],
-            "q_val": data["valence_charges"] + q_shift,
-            "mu": data["cartesian_multipoles"][:, 1:4],
+            "s": _torch.tensor(data["valence_widths"]),
+            "q_core": _torch.tensor(data["core_charges"]),
+            "q_val": _torch.tensor(data["valence_charges"] + q_shift),
+            "mu": _torch.tensor(data["cartesian_multipoles"][:, 1:4]),
         }
 
     def _run_horton_wpart(
