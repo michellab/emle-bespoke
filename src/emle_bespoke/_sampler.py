@@ -1,3 +1,4 @@
+import logging as _logging
 import time
 from typing import Tuple
 
@@ -7,6 +8,8 @@ import torch as _torch
 
 from ._constants import ATOMIC_NUMBERS_TO_SYMBOLS as _ATOMIC_NUMBERS_TO_SYMBOLS
 from ._constants import HARTREE_TO_KJ_MOL as _HARTREE_TO_KJ_MOL
+
+_logger = _logging.getLogger(__name__)
 
 
 class ReferenceDataCalculator:
@@ -35,8 +38,9 @@ class ReferenceDataCalculator:
         context,
         integrator,
         topology,
-        qm_calculator,
         qm_region,
+        qm_calculator,
+        horton_calculator=None,
         energy_scale=_HARTREE_TO_KJ_MOL,
         length_scale=1.0,
         dtype=_torch.float64,
@@ -52,10 +56,11 @@ class ReferenceDataCalculator:
             dtype=_torch.int64,
             device=device,
         )
-
-        # QM settings
         self._qm_region = _torch.tensor(qm_region, dtype=_torch.int64, device=device)
+
+        # Calculators
         self._qm_calculator = qm_calculator
+        self._horton_calculator = horton_calculator
 
         # Energy and length scales to convert the units for/from the QM/MM calculations
         self._energy_scale = energy_scale
@@ -71,11 +76,14 @@ class ReferenceDataCalculator:
             "atomic_numbers": [],
             "xyz_qm": [],
             "s": [],
+            "v": [],
             "q_core": [],
-            "q_val": [],
+            "q": [],
             "alpha": [],
             "xyz_mm": [],
             "charges_mm": [],
+            "e_static": [],
+            "e_ind": [],
         }
 
         # Device and dtype
@@ -84,6 +92,10 @@ class ReferenceDataCalculator:
 
         # Get the point charges
         self._point_charges = self._get_point_charges()
+
+    @property
+    def reference_data(self):
+        return self._reference_data
 
     def _get_point_charges(self):
         """
@@ -221,7 +233,7 @@ class ReferenceDataCalculator:
         calc_induction: bool = True,
         calc_horton: bool = True,
         calc_polarizability: bool = True,
-    ) -> Tuple[float, float, float, float, np.ndarray, np.ndarray]:
+    ) -> dict:
         """
         Sample the system for a given number of steps and calculate the necessary properties.
 
@@ -236,9 +248,16 @@ class ReferenceDataCalculator:
         e_static: float
             Static energy from the QM/MM calculation.
         """
+        _logger.info(
+            f"Sampling new configuration. Number of integration steps: {steps}"
+        )
         if calc_polarizability or calc_horton:
             calc_static = True
-        print("Sampling...")
+
+        assert (
+            self._horton_calculator is not None if calc_horton else True
+        ), "The horton calculator must be provided if the horton partitioning is to be calculated."
+
         # Integrate for a given number of steps
         self._integrator.step(steps)
 
@@ -277,37 +296,63 @@ class ReferenceDataCalculator:
         symbols_mm = [_ATOMIC_NUMBERS_TO_SYMBOLS[an.item()] for an in z_mm]
         symbols = symbols_qm + symbols_mm
 
+        # Define the directory for vacuum calculations and QM/MM calculations
+        directory_vacuum = "vacuum"
+        directory_pc = "pc"
+
         orca_blocks = "%MaxCore 1024\n%pal\nnprocs 1\nend\n"
         if calc_polarizability:
+            _logger.info("Adding the polarizability block to the ORCA input...")
             orca_blocks += "%elprop\nPolar 1\ndipole true\nquadrupole true\nend\n"
 
-        if calc_polarizability or calc_horton or calc_static:
-            vacuum_energy = self._qm_calculator.get_potential_energy(
-                elements=symbols_qm,
-                positions=pos_qm,
-                directory="vacuum",
-                orca_blocks=orca_blocks,
-            )
+        # Run the single point QM energy calculation
+        vacuum_energy = self._qm_calculator.get_potential_energy(
+            elements=symbols_qm,
+            positions=pos_qm,
+            directory=directory_vacuum,
+            orca_blocks=orca_blocks,
+        )
 
         if calc_static:
+            _logger.info("Calculating the static energy...")
             vacuum_pot = self._qm_calculator.get_vpot(
                 mesh=pos_mm,
-                directory="vacuum",
-            )
+                directory=directory_vacuum,
+            ).to(self._device, dtype=self._dtype)
             e_static = (
                 _torch.sum(vacuum_pot * self._point_charges[~molecule_mask][R_cutoff])
                 * self._energy_scale
             )
+        else:
+            e_static = None
+
+        if calc_polarizability:
+            _logger.info("Calculating the polarizability...")
+            polarizability = self._qm_calculator.get_polarizability(
+                directory=directory_vacuum,
+            )
+        else:
+            polarizability = None
 
         if calc_horton:
+            _logger.info("Calculating the horton partitioning...")
             self._qm_calculator.get_mkl(
-                directory="vacuum",
+                directory=directory_vacuum,
             )
 
+            horton_data = self._horton_calculator.get_horton_partitioning(
+                input_file=self._qm_calculator.name_prefix + ".molden.input",
+                directory=directory_vacuum,
+                scheme="mbis",
+                lmax=3,
+            )
         else:
-            s = None
-            q_core = None
-            q_val = None
+            horton_data = {
+                "s": None,
+                "q_core": None,
+                "q_val": None,
+                "alpha": None,
+            }
 
         if calc_induction:
             charges_mm = self._point_charges[~molecule_mask][R_cutoff]
@@ -318,23 +363,29 @@ class ReferenceDataCalculator:
                 elements=symbols,
                 positions=pos_qm,
                 orca_external_potentials=external_potentials,
-                directory="qm_mm",
+                directory=directory_pc,
             )
 
             e_int = (qm_mm_energy - vacuum_energy) * self._energy_scale
             e_ind = e_int - e_static
+        else:
+            e_ind = None
 
         # Add the reference data to the lists
         self._reference_data["atomic_numbers"].append(z_qm)
         self._reference_data["xyz_qm"].append(pos_qm)
-        self._reference_data["s"].append(None)
-        self._reference_data["q_core"].append(None)
-        self._reference_data["q_val"].append(None)
-        self._reference_data["alpha"].append(None)
+        self._reference_data["s"].append(horton_data["s"])
+        self._reference_data["q_core"].append(horton_data["q_core"])
+        self._reference_data["q"].append(horton_data["q"])
+
+        self._reference_data["alpha"].append(polarizability)
         self._reference_data["xyz_mm"].append(pos_mm)
         self._reference_data["charges_mm"].append(charges_mm)
 
-        return e_static, e_ind, vacuum_energy, vacuum_pot, pos_qm, pos_mm
+        self._reference_data["e_static"].append(e_static)
+        self._reference_data["e_ind"].append(e_ind)
+
+        return self._reference_data
 
 
 if __name__ == "__main__":
@@ -345,7 +396,7 @@ if __name__ == "__main__":
     import openmm.unit as unit
     from openmmml import MLPotential
 
-    from .parsers import ORCACalculator as _ORCACalculator
+    from .calculators import HortonCalculator, ORCACalculator
 
     # Load PDB file and set the FFs
     prmtop = app.AmberPrmtopFile(
@@ -384,7 +435,8 @@ if __name__ == "__main__":
         context=context,
         integrator=integrator,
         topology=prmtop.topology,
-        qm_calculator=_ORCACalculator(),
+        qm_calculator=ORCACalculator(),
+        horton_calculator=HortonCalculator(),
         qm_region=mlAtoms,
         energy_scale=_HARTREE_TO_KJ_MOL,
         length_scale=1.0,
@@ -394,4 +446,7 @@ if __name__ == "__main__":
 
     context.setPositions(inpcrd.positions)
     print("Starting sampling...")
-    ref_calculator.sample(10)
+    ref_data = ref_calculator.sample(10)
+    # print data type of every value in ref_data
+    for key, value in ref_data.items():
+        print(f"{key}: {type(value)}")
