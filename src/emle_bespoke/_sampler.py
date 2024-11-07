@@ -6,7 +6,6 @@ import openmm.unit as _unit
 import torch as _torch
 
 from ._constants import ATOMIC_NUMBERS_TO_SYMBOLS as _ATOMIC_NUMBERS_TO_SYMBOLS
-from ._constants import HARTREE_TO_KJ_MOL as _HARTREE_TO_KJ_MOL
 from ._constants import ANGSTROM_TO_BOHR as _ANGSTROM_TO_BOHR
 
 _logger = _logging.getLogger(__name__)
@@ -26,10 +25,6 @@ class ReferenceDataSampler:
         OpenMM integrator.
     topology: simtk.openmm.app.Topology
         OpenMM topology.
-    energy_scale: float
-        Energy scale.
-    length_scale: float
-        Lengt scale.
     """
 
     def __init__(
@@ -42,8 +37,6 @@ class ReferenceDataSampler:
         qm_calculator,
         cutoff=12.0,
         horton_calculator=None,
-        energy_scale=1.0,
-        length_scale=1.0,
         dtype=_torch.float64,
         device=_torch.device("cuda"),
     ):
@@ -62,10 +55,6 @@ class ReferenceDataSampler:
         # Calculators
         self._qm_calculator = qm_calculator
         self._horton_calculator = horton_calculator
-
-        # Energy and length scales to convert the units for/from the QM/MM calculations
-        self._energy_scale = energy_scale
-        self._length_scale = length_scale
 
         # Reference data lists
         self._reference_data = {
