@@ -76,7 +76,10 @@ class EMLEBespoke:
         for i in range(n_samples):
             ref_data = self._ref_sampler.sample(n_steps)
             logger.info(f"Sampled {i + 1}/{n_samples} configurations.")
+            
         logger.info("Finished sampling reference data.")
+
+        self._ref_sampler.write_data()
 
         logger.info("Training bespoke model.")
         self._train(
@@ -98,6 +101,7 @@ class EMLEBespoke:
             device=device,
             dtype=dtype,
         )
+
         logger.info("Finished training bespoke model.")
 
     def patch_model(self):
