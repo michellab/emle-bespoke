@@ -1,6 +1,5 @@
-from sys import stdout
-
 import logging as _logging
+from sys import stdout
 
 _logging.getLogger().setLevel(_logging.INFO)
 
@@ -12,16 +11,12 @@ import openmm.unit as unit
 import torch as torch
 from openmmml import MLPotential
 
+from emle_bespoke import EMLEBespoke, ReferenceDataSampler
 from emle_bespoke.calculators import HortonCalculator, ORCACalculator
-from emle_bespoke import ReferenceDataSampler, EMLEBespoke
 
 # Load PDB file and set the FFs
-prmtop = app.AmberPrmtopFile(
-    "benzene_sage_water.prm7"
-)
-inpcrd = app.AmberInpcrdFile(
-    "benzene_sage_water.rst7"
-)
+prmtop = app.AmberPrmtopFile("benzene_sage_water.prm7")
+inpcrd = app.AmberInpcrdFile("benzene_sage_water.rst7")
 
 # Create the OpenMM MM System and ML potential
 mmSystem = prmtop.createSystem(
@@ -62,5 +57,7 @@ ref_calculator = ReferenceDataSampler(
 
 # Create the EMLE bespoke trainer
 trainer = EMLEBespoke(ref_calculator)
-trainer.train_model(n_samples=2,
-                    n_steps=100,)
+trainer.train_model(
+    n_samples=2,
+    n_steps=100,
+)

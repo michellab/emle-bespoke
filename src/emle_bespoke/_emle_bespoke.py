@@ -6,6 +6,7 @@ from emle.train import EMLETrainer as _EMLETrainer
 
 logger = _logging.getLogger(__name__)
 
+
 class EMLEBespoke:
     """
     Class to train bespoke EMLE models.
@@ -76,7 +77,7 @@ class EMLEBespoke:
         for i in range(n_samples):
             ref_data = self._ref_sampler.sample(n_steps)
             logger.info(f"Sampled {i + 1}/{n_samples} configurations.")
-            
+
         logger.info("Finished sampling reference data.")
 
         self._ref_sampler.write_data()

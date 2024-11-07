@@ -5,8 +5,8 @@ import openmm as _mm
 import openmm.unit as _unit
 import torch as _torch
 
-from ._constants import ATOMIC_NUMBERS_TO_SYMBOLS as _ATOMIC_NUMBERS_TO_SYMBOLS
 from ._constants import ANGSTROM_TO_BOHR as _ANGSTROM_TO_BOHR
+from ._constants import ATOMIC_NUMBERS_TO_SYMBOLS as _ATOMIC_NUMBERS_TO_SYMBOLS
 
 _logger = _logging.getLogger(__name__)
 
@@ -217,6 +217,7 @@ class ReferenceDataSampler:
             Filename.
         """
         import pickle
+
         _logger.debug(f"Writing the reference data to {filename}.")
         with open(filename, "wb") as f:
             pickle.dump(self._reference_data, f)
@@ -238,7 +239,10 @@ class ReferenceDataSampler:
             Reference data.
         """
         import pickle
-        _logger.debug(f"Reading the reference data from {filename} with overwrite set to {overwrite}.")
+
+        _logger.debug(
+            f"Reading the reference data from {filename} with overwrite set to {overwrite}."
+        )
         with open(filename, "rb") as f:
             data = pickle.load(f)
             if overwrite or not self._reference_data:
@@ -246,8 +250,8 @@ class ReferenceDataSampler:
             else:
                 for key in self._reference_data.keys():
                     self._reference_data[key].extend(data[key])
-        return self._reference_data    
-        
+        return self._reference_data
+
     def sample(
         self,
         steps: int,

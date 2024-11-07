@@ -1,6 +1,6 @@
 # emle-bespoke
 
-A package for training and patching EMLE models, with routines for fitting LJ parameters. 
+A package for training and patching EMLE models, with routines for fitting LJ parameters.
 
 ## Table of Contents
 
@@ -23,4 +23,3 @@ pip install -e .
 ```
 
 ## Logging Settings
-

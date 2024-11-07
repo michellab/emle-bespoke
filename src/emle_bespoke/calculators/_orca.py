@@ -34,9 +34,10 @@ class ORCACalculator(BaseCalculator):
     _NAME_PREFIX = "orca"
 
     def __init__(
-        self, name_prefix: Union[str, None] = None, 
-        orca_home: Union[str, None] = None, 
-        energy_scale: float = HARTREE_TO_KJ_MOL
+        self,
+        name_prefix: Union[str, None] = None,
+        orca_home: Union[str, None] = None,
+        energy_scale: float = HARTREE_TO_KJ_MOL,
     ):
         """
         Initialize the ORCA calculator.
@@ -294,7 +295,10 @@ class ORCACalculator(BaseCalculator):
             directory,
         )
 
-        sp_energy = self.read_single_point_energy(output_file_name, directory) * self._energy_scale
+        sp_energy = (
+            self.read_single_point_energy(output_file_name, directory)
+            * self._energy_scale
+        )
 
         return sp_energy
 
