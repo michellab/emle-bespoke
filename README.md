@@ -5,6 +5,7 @@ A package for training and patching EMLE models, with routines for fitting LJ pa
 ## Table of Contents
 
 1. [Installation](#installation)
+1. [Usage](#usage)
 1. [Log Level](#log-level)
 
 ## Installation
