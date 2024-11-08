@@ -22,12 +22,13 @@ from openff.toolkit import Topology as _Topology
 from openff.units import unit as _offunit
 from openmmml import MLPotential as _MLPotential
 
+from .. import log_banner as _log_banner
+
 # Imports from the emle-bespoke package
 from ..bespoke import BespokeModelTrainer as _BespokeModelTrainer
-from ..sampler import ReferenceDataSampler as _ReferenceDataSampler
-from .. import log_banner as _log_banner
 from ..calculators import HortonCalculator as _HortonCalculator
 from ..calculators import ORCACalculator as _ORCACalculator
+from ..sampler import ReferenceDataSampler as _ReferenceDataSampler
 
 PACKMOL_KWARGS = {
     "box_shape": _UNIT_CUBE,
@@ -194,6 +195,14 @@ def main():
     parser.add_argument(
         "--n_steps", type=int, default=1000, help="Number of simulation steps to run."
     )
+
+    parser.add_argument(
+        "--n_equilibration",
+        type=int,
+        default=1000,
+        help="Number of equilibration steps to run.",
+    )
+
     parser.add_argument(
         "--solute", type=str, default="c1ccccc1", help="The ligand SMILES string."
     )
@@ -286,6 +295,11 @@ def main():
     system, context, integrator = create_mixed_system(
         args.ml_model, qm_region, simulation
     )
+
+    if args.n_equilibration:
+        logger.info(f"Running {args.n_equilibration} equilibration steps.")
+        context.setVelocitiesToTemperature(args.temperature * _unit.kelvin)
+        integrator.step(args.n_equilibration)
 
     ref_sampler = _ReferenceDataSampler(
         system=system,
