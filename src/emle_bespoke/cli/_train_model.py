@@ -197,6 +197,13 @@ def main():
     )
 
     parser.add_argument(
+        "--filename-prefix",
+        type=str,
+        default="ligand",
+        help="Prefix for the output files.",
+    )
+
+    parser.add_argument(
         "--n_equilibration",
         type=int,
         default=1000,
@@ -261,8 +268,20 @@ def main():
     if args.n_solvent < 0 or args.n_solute < 0:
         logger.error("n_solvent and n_solute must be non-negative.")
         return
-
+    
     _log_banner()
+
+    # Print all arguments
+    msg = r"""
+╔════════════════════════════════════════════════════════════╗
+║                      Input CLI Arguments                   ║
+╚════════════════════════════════════════════════════════════╝
+"""
+    for line in msg.split("\n"):
+        logger.info(line)
+    for arg in vars(args):
+        logger.info(f"{arg}: {getattr(args, arg)}")
+    logger.info("\n══════════════════════════════════════════════════════════════\n")
 
     # Create topology
     topology_off = create_off_topology(
@@ -311,7 +330,7 @@ def main():
         horton_calculator=_HortonCalculator(),
     )
 
-    emle_bespoke = _BespokeModelTrainer(ref_sampler)
+    emle_bespoke = _BespokeModelTrainer(ref_sampler, filename_prefix=args.filename_prefix)
     emle_bespoke.train_model(n_samples=args.n_samples, n_steps=args.n_steps)
 
 

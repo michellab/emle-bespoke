@@ -1,4 +1,7 @@
 #!/bin/bash
+
+set -e
+
 N_SAMPLES=1
 ML_MODEL=mace-off23-small
 N_EQUILIBRATION=10
@@ -19,7 +22,7 @@ fi
 
 # Read the CSV file line by line
 while IFS=, read -r NAME SMILES; do
-    smiles=$(echo "$smiles" | tr -d '[:space:]')
-    echo ${NAME} ${SMILES}
-    emle-bespoke --solute ${SMILES} --n_sample ${N_SAMPLES} --ml_model ${ML_MODEL} --n_equilibration ${N_EQUILIBRATION}
+    SMILES=$(echo "$SMILES" | tr -d '[:space:]')  # Fixed case of SMILES
+    echo "${NAME} ${SMILES}"  # Wrapped in double quotes to prevent issues with spaces
+    emle-bespoke --filename-prefix ${NAME} --solute "${SMILES}" --n_sample "${N_SAMPLES}" --ml_model "${ML_MODEL}" --n_equilibration "${N_EQUILIBRATION}"
 done < "$csv_file"

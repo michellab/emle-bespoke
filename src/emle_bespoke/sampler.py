@@ -260,7 +260,7 @@ class ReferenceDataSampler:
         self,
         steps: int,
         calc_static: bool = True,
-        calc_induction: bool = False,
+        calc_induction: bool = True,
         calc_horton: bool = True,
         calc_polarizability: bool = True,
     ) -> dict:

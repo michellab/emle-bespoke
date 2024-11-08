@@ -19,9 +19,10 @@ class BespokeModelTrainer:
         The EMLE base model to use. Default is EMLEBase.
     """
 
-    def __init__(self, ref_sampler, emle_base: _EMLEBase = _EMLEBase):
+    def __init__(self, ref_sampler, emle_base: _EMLEBase = _EMLEBase, filename_prefix: str ="ref"):
         self._ref_sampler = ref_sampler
         self._emle_base = emle_base
+        self._filename_prefix = filename_prefix
 
     def train_model(
         self,
@@ -35,7 +36,8 @@ class BespokeModelTrainer:
         lr_qeq=0.01,
         lr_thole=0.01,
         lr_sqrtk=0.01,
-        model_filename="bespoke_model.mat",
+        ref_data_filename=None,
+        model_filename=None,
         device=_torch.device("cuda"),
         dtype=_torch.float64,
     ):
@@ -86,7 +88,8 @@ class BespokeModelTrainer:
 
         logger.info("Finished sampling reference data.")
 
-        self._ref_sampler.write_data()
+        ref_data_filename = ref_data_filename or f"{self._filename_prefix}_ref_data.mat"
+        self._ref_sampler.write_data(filename=ref_data_filename)
 
         msg = r"""
 ╔════════════════════════════════════════════════════════════╗
@@ -95,6 +98,7 @@ class BespokeModelTrainer:
 """
         for line in msg.split("\n"):
             logger.info(line)
+
         self._train(
             z=ref_data["z"],
             xyz=ref_data["xyz_qm"],
@@ -110,7 +114,7 @@ class BespokeModelTrainer:
             lr_qeq=lr_qeq,
             lr_thole=lr_thole,
             lr_sqrtk=lr_sqrtk,
-            model_filename=model_filename,
+            model_filename=model_filename or f"{self._filename_prefix}_bespoke_model.mat",
             device=device,
             dtype=dtype,
         )
