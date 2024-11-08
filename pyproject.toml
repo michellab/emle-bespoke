@@ -41,6 +41,9 @@ tests = [
 [project.urls]
 repository = "https://github.com/michellab/emle-bespoke"
 
+[project.scripts]
+emle-bespoke = "emle_bespoke.cli._train_model:main"
+
 [tool.coverage.run]
 source = ['src/emle_bespoke']
 
