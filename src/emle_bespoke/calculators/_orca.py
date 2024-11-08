@@ -1,6 +1,7 @@
+import logging as _logging
 import os as _os
 from typing import Union
-import logging as _logging
+
 import torch as _torch
 
 from .._constants import ANGSTROM_TO_BOHR, HARTREE_TO_KJ_MOL
@@ -50,7 +51,7 @@ class ORCACalculator(BaseCalculator):
 
         if not self._orca_home:
             raise ValueError("ORCA_HOME is not set.")
-        
+
         _logger.debug(f"Initialized ORCA calculator.")
         _logger.debug(f"ORCA home: {self._orca_home}")
         _logger.debug(f"Name prefix: {self._name_prefix}")

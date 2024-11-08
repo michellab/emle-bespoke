@@ -2,25 +2,25 @@
 
 # General imports
 import argparse
-import re
 import logging
-from typing import Any, Dict, Optional, Tuple
+import re
 from copy import deepcopy
+from typing import Any, Dict, Optional, Tuple
 
 # OpenMM imports
 import openmm as _mm
 import openmm.app as _app
 import openmm.unit as _unit
-from openmmml import MLPotential as _MLPotential
+from openff.interchange import Interchange as _Interchange
+from openff.interchange.components._packmol import UNIT_CUBE as _UNIT_CUBE
+from openff.interchange.components._packmol import pack_box as _pack_box
 
 # OpenFF imports
 from openff.toolkit import ForceField as _ForceField
 from openff.toolkit import Molecule as _Molecule
 from openff.toolkit import Topology as _Topology
 from openff.units import unit as _offunit
-from openff.interchange import Interchange as _Interchange
-from openff.interchange.components._packmol import UNIT_CUBE as _UNIT_CUBE
-from openff.interchange.components._packmol import pack_box as _pack_box
+from openmmml import MLPotential as _MLPotential
 
 # Imports from the emle-bespoke package
 from .. import EMLEBespoke as _EMLEBespoke
@@ -36,6 +36,7 @@ PACKMOL_KWARGS = {
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 def is_mapped_smiles(smiles: str) -> bool:
     """Check if the given SMILES string is a mapped SMILES."""
@@ -70,7 +71,7 @@ def create_off_topology(
         logger.info(f"Solvent SMILES: {solvent_smiles}")
         for key, value in (packmol_kwargs or PACKMOL_KWARGS).items():
             logger.info(f"Packmol kwarg: {key} = {value}")
-            
+
         solute = create_molecule(solute_smiles)
         if n_solvent == 0 or solvent_smiles is None:
             return solute.to_topology()
@@ -104,7 +105,7 @@ def create_simulation(
         logger.info(f"Pressure: {pressure} bar")
         logger.info(f"Timestep: {timestep} fs")
         logger.info(f"Friction coefficient: {friction_coefficient} ps^-1")
-        
+
         integrator = _mm.LangevinIntegrator(
             temperature * _unit.kelvin,
             friction_coefficient / _mm.unit.picosecond,
@@ -131,7 +132,10 @@ def create_simulation(
         logger.error(f"Failed to create OpenMM simulation: {e}")
         raise RuntimeError(f"Failed to create OpenMM simulation: {e}")
 
-def create_mixed_system(ml_model: str, ml_atoms, simulation: _app.Simulation) -> Tuple[_mm.System, _mm.Context, _mm.Integrator]:
+
+def create_mixed_system(
+    ml_model: str, ml_atoms, simulation: _app.Simulation
+) -> Tuple[_mm.System, _mm.Context, _mm.Integrator]:
     """
     Create a mixed system with the provided ML model and simulation object.
 
@@ -157,7 +161,9 @@ def create_mixed_system(ml_model: str, ml_atoms, simulation: _app.Simulation) ->
             simulation.topology, simulation.system, ml_atoms
         )
         context = _mm.Context(system, integrator)
-        context.setPositions(simulation.context.getState(getPositions=True).getPositions())
+        context.setPositions(
+            simulation.context.getState(getPositions=True).getPositions()
+        )
     else:
         logger.info("No ML model provided. Using the original MM system.")
         system = simulation.system
@@ -166,25 +172,71 @@ def create_mixed_system(ml_model: str, ml_atoms, simulation: _app.Simulation) ->
 
     return system, context, integrator
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Generate reference data and train a bespoke EMLE model."
     )
 
     # Command-line arguments
-    parser.add_argument("--n_solute", type=int, default=1, help="Number of ligands in the system.")
-    parser.add_argument("--n_solvent", type=int, default=1000, help="Number of water molecules in the system.")
-    parser.add_argument("--n_samples", type=int, default=100, help="Number of samples to generate.")
-    parser.add_argument("--n_steps", type=int, default=1000, help="Number of simulation steps to run.")
-    parser.add_argument("--solute", type=str, default="c1ccccc1", help="The ligand SMILES string.")
-    parser.add_argument("--solvent", type=str, default="[H:2][O:1][H:3]", help="The solvent SMILES string.")
-    parser.add_argument("--forcefield", type=str, default="openff-2.0.0.offxml", help="The force field(s) to use, separated by commas.")
-    parser.add_argument("--temperature", type=float, default=298.15, help="Simulation temperature in Kelvin.")
-    parser.add_argument("--pressure", type=float, default=1.0, help="Simulation pressure in bar.")
-    parser.add_argument("--timestep", type=float, default=1.0, help="Simulation timestep in femtoseconds.")
-    parser.add_argument("--friction_coefficient", type=float, default=1.0, help="Langevin friction coefficient (ps^-1).")
-    parser.add_argument("--ml_model", type=str, default=None, help="The machine learning model to use for the solute.")
-    
+    parser.add_argument(
+        "--n_solute", type=int, default=1, help="Number of ligands in the system."
+    )
+    parser.add_argument(
+        "--n_solvent",
+        type=int,
+        default=1000,
+        help="Number of water molecules in the system.",
+    )
+    parser.add_argument(
+        "--n_samples", type=int, default=100, help="Number of samples to generate."
+    )
+    parser.add_argument(
+        "--n_steps", type=int, default=1000, help="Number of simulation steps to run."
+    )
+    parser.add_argument(
+        "--solute", type=str, default="c1ccccc1", help="The ligand SMILES string."
+    )
+    parser.add_argument(
+        "--solvent",
+        type=str,
+        default="[H:2][O:1][H:3]",
+        help="The solvent SMILES string.",
+    )
+    parser.add_argument(
+        "--forcefield",
+        type=str,
+        default="openff-2.0.0.offxml",
+        help="The force field(s) to use, separated by commas.",
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=298.15,
+        help="Simulation temperature in Kelvin.",
+    )
+    parser.add_argument(
+        "--pressure", type=float, default=1.0, help="Simulation pressure in bar."
+    )
+    parser.add_argument(
+        "--timestep",
+        type=float,
+        default=1.0,
+        help="Simulation timestep in femtoseconds.",
+    )
+    parser.add_argument(
+        "--friction_coefficient",
+        type=float,
+        default=1.0,
+        help="Langevin friction coefficient (ps^-1).",
+    )
+    parser.add_argument(
+        "--ml_model",
+        type=str,
+        default=None,
+        help="The machine learning model to use for the solute.",
+    )
+
     # Parse the arguments
     args = parser.parse_args()
 
@@ -200,20 +252,22 @@ def main():
     if args.n_solvent < 0 or args.n_solute < 0:
         logger.error("n_solvent and n_solute must be non-negative.")
         return
-    
+
     _log_banner()
 
     # Create topology
     topology_off = create_off_topology(
-        n_solute=args.n_solute, 
-        n_solvent=args.n_solvent, 
-        solvent_smiles=args.solvent, 
-        solute_smiles=args.solute
+        n_solute=args.n_solute,
+        n_solvent=args.n_solvent,
+        solvent_smiles=args.solvent,
+        solute_smiles=args.solute,
     )
 
     # Initialize force field and interchange object
     force_field = _ForceField(*args.forcefield.split(","))
-    interchange = _Interchange.from_smirnoff(force_field=force_field, topology=topology_off)
+    interchange = _Interchange.from_smirnoff(
+        force_field=force_field, topology=topology_off
+    )
 
     # Create simulation object
     simulation = create_simulation(
@@ -229,8 +283,10 @@ def main():
     qm_region = [atom.index for atom in list(topology.chains())[0].atoms()]
 
     # Create mixed system
-    system, context, integrator = create_mixed_system(args.ml_model, qm_region, simulation)
-    
+    system, context, integrator = create_mixed_system(
+        args.ml_model, qm_region, simulation
+    )
+
     ref_sampler = _ReferenceDataSampler(
         system=system,
         context=context,

@@ -1,6 +1,6 @@
+import logging as _logging
 import os as _os
 from typing import Union
-import logging as _logging
 
 import h5py as _h5py
 import numpy as _np
@@ -9,6 +9,7 @@ import torch as _torch
 from ._base import BaseCalculator
 
 _logger = _logging.getLogger(__name__)
+
 
 class HortonCalculator(BaseCalculator):
     """
