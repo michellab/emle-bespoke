@@ -1,11 +1,11 @@
 [build-system]
-requires = ["setuptools>=42", "wheel"]
+requires = ["setuptools>=61.0", "wheel", "versioneer"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "emle-bespoke"
 description = "A package for training and patching EMLE models, with routines for fitting LJ parameters. "
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 keywords = ["free energy simulation", "free energy", "force field", "machine learning", "openmm"]
 authors = [{email = "jmorado@ed.ac.uk"},{name = "Joao Morado"}]
 maintainers = [{name = "Joao Morado", email = "jmorado@ed.ac.uk"}]
@@ -13,7 +13,6 @@ classifiers = [
   "License :: OSI Approved :: GPL License",
   "Intended Audience :: Science/Research",
   "Intended Audience :: Developers",
-  "Topic :: Oceanography Modeling",
   "Topic :: Scientific/Engineering",
   "Programming Language :: Python",
   "Programming Language :: Python :: 3.10"
@@ -48,7 +47,7 @@ emle-bespoke = "emle_bespoke.cli._train_model:main"
 source = ['src/emle_bespoke']
 
 [tool.setuptools.dynamic]
-version = {attr = "emle_bespoke.__init__.__version__"}
+version = {attr = "emle_bespoke.__version__"}
 # dependencies = {file = ["requirements.txt"]}
 
 [tool.setuptools.packages.find]
@@ -56,3 +55,15 @@ where = ["src"]
 include = ["*"]
 exclude = ["*__pycache__*"]
 namespaces = true
+
+[tool.setuptools]
+zip-safe = false
+include-package-data = false
+
+[tool.versioneer]
+VCS = "git"
+style = "pep440"
+versionfile_source = "src/emle_bespoke/_version.py"
+versionfile_build = "emle_bespoke/_version.py"
+tag_prefix = ""
+parentdir_prefix = "emle_bespoke"

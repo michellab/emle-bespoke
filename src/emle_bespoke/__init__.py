@@ -1,10 +1,8 @@
 """emle-bespoke base package."""
 
-__version__ = "0.0.1"
-__author__ = "Joao Morado"
-
-from ._emle_bespoke import EMLEBespoke
+from . import _version
 from ._log import config_logger, log_banner
-from ._sampler import ReferenceDataSampler
 
-__all__ = ["EMLEBespoke", "ReferenceDataSampler"]
+__author__ = "Joao Morado"
+__version__ = _version.get_versions()['version']
+__all__ = ["__version__"]

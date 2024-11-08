@@ -23,8 +23,8 @@ from openff.units import unit as _offunit
 from openmmml import MLPotential as _MLPotential
 
 # Imports from the emle-bespoke package
-from .. import EMLEBespoke as _EMLEBespoke
-from .. import ReferenceDataSampler as _ReferenceDataSampler
+from ..bespoke import BespokeModelTrainer as _BespokeModelTrainer
+from ..sampler import ReferenceDataSampler as _ReferenceDataSampler
 from .. import log_banner as _log_banner
 from ..calculators import HortonCalculator as _HortonCalculator
 from ..calculators import ORCACalculator as _ORCACalculator
@@ -297,7 +297,7 @@ def main():
         horton_calculator=_HortonCalculator(),
     )
 
-    emle_bespoke = _EMLEBespoke(ref_sampler)
+    emle_bespoke = _BespokeModelTrainer(ref_sampler)
     emle_bespoke.train_model(n_samples=args.n_samples, n_steps=args.n_steps)
 
 

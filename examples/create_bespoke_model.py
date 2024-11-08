@@ -11,7 +11,7 @@ import openmm.unit as unit
 import torch as torch
 from openmmml import MLPotential
 
-from emle_bespoke import EMLEBespoke, ReferenceDataSampler
+from emle_bespoke.bespoke import EMLEBespokeTrainer as EMLEBespoke
 from emle_bespoke.calculators import HortonCalculator, ORCACalculator
 
 # Load PDB file and set the FFs

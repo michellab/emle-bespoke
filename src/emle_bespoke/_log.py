@@ -3,13 +3,13 @@ import logging
 import logging.config
 import os
 
-from . import __version__
-
 logger = logging.getLogger(__name__)
 
 
 def log_banner() -> None:
     """Print a banner with the emle-bespoke logo."""
+    from ._version import get_versions
+    version = get_versions()['version']
     banner = r"""
 ╔══════════════════════════════════════════════════════╗
 ║                       _                              ║
@@ -27,11 +27,11 @@ def log_banner() -> None:
 ║                       | |                            ║
 ║                       |_|                            ║
 ║                                                      ║
-║                  EMLE Bespoke v{}                 ║
 ╚══════════════════════════════════════════════════════╝
+version: {}
 
 """.format(
-        __version__
+        version
     )
 
     lines = banner.split("\n")

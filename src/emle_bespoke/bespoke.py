@@ -7,7 +7,7 @@ from emle.train import EMLETrainer as _EMLETrainer
 logger = _logging.getLogger(__name__)
 
 
-class EMLEBespoke:
+class BespokeModelTrainer:
     """
     Class to train bespoke EMLE models.
 
