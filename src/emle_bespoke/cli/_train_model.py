@@ -10,12 +10,14 @@ from typing import Any, Dict, Optional
 import openmm as _mm
 import openmm.app as _app
 import openmm.unit as _unit
-from openff.interchange import _Interchange
-from openff.interchange.components._packmol import UNIT_CUBE, _pack_box
+from openff.interchange import Interchange as _Interchange
+from openff.interchange.components._packmol import UNIT_CUBE as _UNIT_CUBE
+from openff.interchange.components._packmol import pack_box as _pack_box
 
 # OpenFF imports
 from openff.toolkit import ForceField as _ForceField
 from openff.toolkit import Molecule as _Molecule
+from openff.toolkit import Topology as _Topology
 from openff.units import unit as _offunit
 
 # Imports from the emle-bespoke package
@@ -25,13 +27,12 @@ from ..calculators import HortonCalculator as _HortonCalculator
 from ..calculators import ORCACalculator as _ORCACalculator
 
 PACKMOL_KWARGS = {
-    "box_shape": UNIT_CUBE,
-    "mass_density": 1.0 * _offunit.gram / _offunit.milliliter,
+    "box_shape": _UNIT_CUBE,
+    "target_density": 1.0 * _offunit.gram / _offunit.milliliter,
 }
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
 
 def is_mapped_smiles(smiles: str) -> bool:
     """Check if the given SMILES string is a mapped SMILES."""
@@ -56,9 +57,17 @@ def create_off_topology(
     solvent_smiles: str,
     solute_smiles: str,
     packmol_kwargs: Optional[Dict[str, Any]] = None,
-) -> _Interchange.Topology:
+) -> _Topology:
     """Create an OpenFF topology for a system with solute and solvent molecules."""
     try:
+        logger.info("Creating OpenFF topology.")
+        logger.info(f"Number of solute molecules: {n_solute}")
+        logger.info(f"Number of solvent molecules: {n_solvent}")
+        logger.info(f"Solute SMILES: {solute_smiles}")
+        logger.info(f"Solvent SMILES: {solvent_smiles}")
+        for key, value in (packmol_kwargs or PACKMOL_KWARGS).items():
+            logger.info(f"Packmol kwarg: {key} = {value}")
+            
         solute = create_molecule(solute_smiles)
         if n_solvent == 0 or solvent_smiles is None:
             return solute.to_topology()
@@ -75,7 +84,7 @@ def create_off_topology(
         )
     except Exception as e:
         logger.error(f"Failed to create OpenFF topology: {e}")
-        raise RuntimeError("Failed to create OpenFF topology.") from e
+        raise RuntimeError(f"Failed to create OpenFF topology: {e}")
 
 
 def create_simulation(
@@ -87,6 +96,12 @@ def create_simulation(
 ) -> _app.Simulation:
     """Create an OpenMM simulation from the provided interchange object."""
     try:
+        logger.info("Creating OpenMM simulation.")
+        logger.info(f"Temperature: {temperature} K")
+        logger.info(f"Pressure: {pressure} bar")
+        logger.info(f"Timestep: {timestep} fs")
+        logger.info(f"Friction coefficient: {friction_coefficient} ps^-1")
+        
         integrator = _mm.LangevinIntegrator(
             temperature * _unit.kelvin,
             friction_coefficient / _mm.unit.picosecond,
@@ -111,7 +126,7 @@ def create_simulation(
         return simulation
     except Exception as e:
         logger.error(f"Failed to create OpenMM simulation: {e}")
-        raise RuntimeError("Failed to create OpenMM simulation.") from e
+        raise RuntimeError(f"Failed to create OpenMM simulation: {e}")
 
 
 def main():
@@ -164,11 +179,12 @@ def main():
     # Define QM region and train model
     topology = topology_off.to_openmm()
     qm_region = [atom.index for atom in list(topology.chains())[0].atoms()]
+
     ref_sampler = _ReferenceDataSampler(
         system=simulation.system,
         context=simulation.context,
         integrator=simulation.integrator,
-        topology=topology_off,
+        topology=topology,
         qm_region=qm_region,
         qm_calculator=_ORCACalculator(),
         horton_calculator=_HortonCalculator(),
