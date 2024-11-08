@@ -37,6 +37,8 @@ class ReferenceDataSampler:
         qm_calculator,
         cutoff=12.0,
         horton_calculator=None,
+        energy_scale=1.0,
+        length_scale=_ANGSTROM_TO_BOHR,
         dtype=_torch.float64,
         device=_torch.device("cuda"),
     ):
@@ -51,6 +53,8 @@ class ReferenceDataSampler:
             device=device,
         )
         self._qm_region = _torch.tensor(qm_region, dtype=_torch.int64, device=device)
+        self._energy_scale = energy_scale
+        self._length_scale = length_scale
 
         # Calculators
         self._qm_calculator = qm_calculator
@@ -400,9 +404,9 @@ class ReferenceDataSampler:
 
         # Add the reference data to the lists
         self._reference_data["z"].append(z_qm)
-        self._reference_data["xyz_qm"].append(pos_qm * _ANGSTROM_TO_BOHR)
+        self._reference_data["xyz_qm"].append(pos_qm * self._length_scale)
         self._reference_data["alpha"].append(polarizability)
-        self._reference_data["xyz_mm"].append(pos_mm * _ANGSTROM_TO_BOHR)
+        self._reference_data["xyz_mm"].append(pos_mm * self._length_scale)
         self._reference_data["charges_mm"].append(charges_mm)
         self._reference_data["s"].append(horton_data["s"])
         self._reference_data["mu"].append(horton_data["mu"])
