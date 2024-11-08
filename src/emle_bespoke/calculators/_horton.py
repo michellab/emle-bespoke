@@ -1,5 +1,6 @@
 import os as _os
 from typing import Union
+import logging as _logging
 
 import h5py as _h5py
 import numpy as _np
@@ -7,6 +8,7 @@ import torch as _torch
 
 from ._base import BaseCalculator
 
+_logger = _logging.getLogger(__name__)
 
 class HortonCalculator(BaseCalculator):
     """
@@ -34,6 +36,9 @@ class HortonCalculator(BaseCalculator):
 
     def __init__(self, name_prefix: Union[str, None] = None):
         self._name_prefix = name_prefix or self._NAME_PREFIX
+
+        _logger.debug("Initialized HortonCalculator")
+        _logger.debug(f"Name prefix: {self._name_prefix}")
 
     def get_horton_partitioning(
         self,

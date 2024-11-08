@@ -23,3 +23,17 @@ pip install -e .
 ```
 
 ## Logging Settings
+
+By default, emle-bespoke logs messages at the INFO level. This means you will see informative messages about the overall progress but not necessarily detailed debugging information. You can control the verbosity of the logging output by setting the `EMLE_BESPOKE_LOG_LEVEL` environment variable:
+
+```bash
+export EMLE_BESPOKE_LOG_LEVEL="DEBUG"
+```
+
+If you want to include log messages from packages other than emle-bespke, set the `EMLE_BESPOKE_FILTER_LOGGERS` variable to 0:
+
+```bash
+export EMLE_BESPOKE_FILTER_LOGGERS=0
+```
+
+By default, this variable is set to 1, meaning only log messages coming from emle-bespoke are displayed.

@@ -71,7 +71,13 @@ class EMLEBespoke:
         dtype : torch.dtype, optional
             The data type. Default is float64.
         """
-        logger.info("Starting bespoke model training.")
+        msg = r"""
+╔════════════════════════════════════════════════════════════╗
+║    Starting sampling of reference data model training...   ║
+╚════════════════════════════════════════════════════════════╝
+"""
+        for line in msg.split("\n"):
+            logger.info(line)
         logger.info(f"Number of samples to sample: {n_samples}")
         logger.info(f"Number of steps per sample: {n_steps}")
         for i in range(n_samples):
@@ -82,7 +88,13 @@ class EMLEBespoke:
 
         self._ref_sampler.write_data()
 
-        logger.info("Training bespoke model.")
+        msg = r"""
+╔════════════════════════════════════════════════════════════╗
+║         Starting training of bespoke EMLE model....        ║
+╚════════════════════════════════════════════════════════════╝
+"""
+        for line in msg.split("\n"):
+            logger.info(line)
         self._train(
             z=ref_data["z"],
             xyz=ref_data["xyz_qm"],
@@ -120,7 +132,7 @@ class EMLEBespoke:
         q_val,
         alpha,
         train_mask=None,
-        alpha_mode="species",
+        alpha_mode="reference",
         sigma=1e-3,
         ivm_thr=0.02,
         epochs=100,

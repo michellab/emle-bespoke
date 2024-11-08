@@ -23,6 +23,7 @@ from openff.units import unit as _offunit
 # Imports from the emle-bespoke package
 from .. import EMLEBespoke as _EMLEBespoke
 from .. import ReferenceDataSampler as _ReferenceDataSampler
+from .. import log_banner as _log_banner
 from ..calculators import HortonCalculator as _HortonCalculator
 from ..calculators import ORCACalculator as _ORCACalculator
 
@@ -150,10 +151,20 @@ def main():
     # Parse the arguments
     args = parser.parse_args()
 
+    try:
+        args = parser.parse_args()
+    except argparse.ArgumentError as e:
+        logger.error(f"Error: {e}")
+    except SystemExit as e:
+        logger.error(f"Unrecognized argument(s) detected: {e}")
+        exit(1)
+
     # Validation of critical arguments
     if args.n_solvent < 0 or args.n_solute < 0:
         logger.error("n_solvent and n_solute must be non-negative.")
         return
+    
+    _log_banner()
 
     # Create topology
     topology_off = create_off_topology(

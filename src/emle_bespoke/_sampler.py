@@ -333,7 +333,7 @@ class ReferenceDataSampler:
             orca_blocks += "%elprop\nPolar 1\ndipole true\nquadrupole true\nend\n"
 
         # Run the single point QM energy calculation
-        _logger.debug("Running the single point QM energy calculation...")
+        _logger.debug("Running the single point QM energy calculation.")
         vacuum_energy = self._qm_calculator.get_potential_energy(
             elements=symbols_qm,
             positions=pos_qm,
@@ -342,7 +342,7 @@ class ReferenceDataSampler:
         )
 
         if calc_static:
-            _logger.debug("Getting the static energy...")
+            _logger.debug("Getting the static energy.")
             vacuum_pot = self._qm_calculator.get_vpot(
                 mesh=pos_mm,
                 directory=directory_vacuum,
@@ -355,7 +355,7 @@ class ReferenceDataSampler:
             e_static = None
 
         if calc_polarizability:
-            _logger.debug("Getting the polarizability...")
+            _logger.debug("Getting the polarizability.")
             polarizability = self._qm_calculator.get_polarizability(
                 directory=directory_vacuum,
             )
@@ -363,7 +363,7 @@ class ReferenceDataSampler:
             polarizability = None
 
         if calc_horton:
-            _logger.debug("Getting the horton partitioning...")
+            _logger.debug("Getting the horton partitioning.")
             self._qm_calculator.get_mkl(
                 directory=directory_vacuum,
             )
@@ -386,7 +386,7 @@ class ReferenceDataSampler:
         charges_mm = self._point_charges[~molecule_mask][R_cutoff]
 
         if calc_induction:
-            _logger.info("Getting the induction energy...")
+            _logger.info("Getting the induction energy.")
             external_potentials = _torch.hstack(
                 [_torch.unsqueeze(charges_mm, dim=1), pos_mm]
             )
