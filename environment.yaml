@@ -6,6 +6,8 @@ channels:
 dependencies:
   - python
   - pip
+  - pre_commit
+  - versioneer
   - numpy
   - h5py
   - horton
