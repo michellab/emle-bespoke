@@ -19,7 +19,12 @@ class BespokeModelTrainer:
         The EMLE base model to use. Default is EMLEBase.
     """
 
-    def __init__(self, ref_sampler, emle_base: _EMLEBase = _EMLEBase, filename_prefix: str ="ref"):
+    def __init__(
+        self,
+        ref_sampler,
+        emle_base: _EMLEBase = _EMLEBase,
+        filename_prefix: str = "bespoke",
+    ):
         self._ref_sampler = ref_sampler
         self._emle_base = emle_base
         self._filename_prefix = filename_prefix
@@ -88,7 +93,7 @@ class BespokeModelTrainer:
 
         logger.info("Finished sampling reference data.")
 
-        ref_data_filename = ref_data_filename or f"{self._filename_prefix}_ref_data.mat"
+        ref_data_filename = ref_data_filename or f"{self._filename_prefix}_ref_data.pkl"
         self._ref_sampler.write_data(filename=ref_data_filename)
 
         msg = r"""
@@ -114,7 +119,8 @@ class BespokeModelTrainer:
             lr_qeq=lr_qeq,
             lr_thole=lr_thole,
             lr_sqrtk=lr_sqrtk,
-            model_filename=model_filename or f"{self._filename_prefix}_bespoke_model.mat",
+            model_filename=model_filename
+            or f"{self._filename_prefix}_bespoke_model.mat",
             device=device,
             dtype=dtype,
         )
