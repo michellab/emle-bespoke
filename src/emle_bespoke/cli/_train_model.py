@@ -4,21 +4,23 @@
 import argparse
 import re
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
+from copy import deepcopy
 
 # OpenMM imports
 import openmm as _mm
 import openmm.app as _app
 import openmm.unit as _unit
-from openff.interchange import Interchange as _Interchange
-from openff.interchange.components._packmol import UNIT_CUBE as _UNIT_CUBE
-from openff.interchange.components._packmol import pack_box as _pack_box
+from openmmml import MLPotential as _MLPotential
 
 # OpenFF imports
 from openff.toolkit import ForceField as _ForceField
 from openff.toolkit import Molecule as _Molecule
 from openff.toolkit import Topology as _Topology
 from openff.units import unit as _offunit
+from openff.interchange import Interchange as _Interchange
+from openff.interchange.components._packmol import UNIT_CUBE as _UNIT_CUBE
+from openff.interchange.components._packmol import pack_box as _pack_box
 
 # Imports from the emle-bespoke package
 from .. import EMLEBespoke as _EMLEBespoke
@@ -129,6 +131,40 @@ def create_simulation(
         logger.error(f"Failed to create OpenMM simulation: {e}")
         raise RuntimeError(f"Failed to create OpenMM simulation: {e}")
 
+def create_mixed_system(ml_model: str, ml_atoms, simulation: _app.Simulation) -> Tuple[_mm.System, _mm.Context, _mm.Integrator]:
+    """
+    Create a mixed system with the provided ML model and simulation object.
+
+    Parameters
+    ----------
+    ml_model : str
+        The machine learning model to use for the solute.
+    ml_atoms : list
+        The indices of the atoms to be treated with the ML model.
+    simulation : _app.Simulation
+        The OpenMM simulation object.
+
+    Returns
+    -------
+    _mm.System, _mm.Context, _mm.Integrator
+        The OpenMM system, context, and integrator instances.
+    """
+    if ml_model:
+        logger.info(f"Creating mixed system with ML model '{ml_model}'.")
+        potential = _MLPotential(ml_model)
+        integrator = deepcopy(simulation.integrator)
+        system = potential.createMixedSystem(
+            simulation.topology, simulation.system, ml_atoms
+        )
+        context = _mm.Context(system, integrator)
+        context.setPositions(simulation.context.getState(getPositions=True).getPositions())
+    else:
+        logger.info("No ML model provided. Using the original MM system.")
+        system = simulation.system
+        context = simulation.context
+        integrator = simulation.integrator
+
+    return system, context, integrator
 
 def main():
     parser = argparse.ArgumentParser(
@@ -147,7 +183,8 @@ def main():
     parser.add_argument("--pressure", type=float, default=1.0, help="Simulation pressure in bar.")
     parser.add_argument("--timestep", type=float, default=1.0, help="Simulation timestep in femtoseconds.")
     parser.add_argument("--friction_coefficient", type=float, default=1.0, help="Langevin friction coefficient (ps^-1).")
-
+    parser.add_argument("--ml_model", type=str, default=None, help="The machine learning model to use for the solute.")
+    
     # Parse the arguments
     args = parser.parse_args()
 
@@ -191,10 +228,13 @@ def main():
     topology = topology_off.to_openmm()
     qm_region = [atom.index for atom in list(topology.chains())[0].atoms()]
 
+    # Create mixed system
+    system, context, integrator = create_mixed_system(args.ml_model, qm_region, simulation)
+    
     ref_sampler = _ReferenceDataSampler(
-        system=simulation.system,
-        context=simulation.context,
-        integrator=simulation.integrator,
+        system=system,
+        context=context,
+        integrator=integrator,
         topology=topology,
         qm_region=qm_region,
         qm_calculator=_ORCACalculator(),

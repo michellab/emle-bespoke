@@ -35,6 +35,12 @@ emle-bespoke --solute c1ccccc1
 
 This command will automatically solvate benzene in a 1000-molecule water box and create a simulation using the default settings.
 
+To sample the reference configurations using a hybrid mechanically-embedded ML/MM simulation with the ANI-2x model, run:
+
+```bash
+emle-bespoke --solute c1ccccc1 --ml_model ani2x
+```
+
 For more information on usage and available options, run:
 
 ```bash
