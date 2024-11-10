@@ -101,7 +101,8 @@ class ReferenceDataSampler:
             self._topology.getNumAtoms(), dtype=_torch.float64, device=self._device
         )
         for i in range(non_bonded_force.getNumParticles()):
-            _, charge, _ = non_bonded_force.getParticleParameters(i)
+            # charge, sigma, epsilon 
+            charge, _, _ = non_bonded_force.getParticleParameters(i)
             point_charges[i] = charge._value
         return point_charges
 

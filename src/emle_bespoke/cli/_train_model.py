@@ -220,9 +220,9 @@ def main():
         help="The solvent SMILES string.",
     )
     parser.add_argument(
-        "--forcefield",
+        "--forcefields",
         type=str,
-        default="openff-2.0.0.offxml",
+        default="openff-2.0.0.offxml,tip3p.offxml",
         help="The force field(s) to use, separated by commas.",
     )
     parser.add_argument(
@@ -292,7 +292,7 @@ def main():
     )
 
     # Initialize force field and interchange object
-    force_field = _ForceField(*args.forcefield.split(","))
+    force_field = _ForceField(*args.forcefields.split(","))
     interchange = _Interchange.from_smirnoff(
         force_field=force_field, topology=topology_off
     )
