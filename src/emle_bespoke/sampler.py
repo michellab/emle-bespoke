@@ -387,7 +387,7 @@ class ReferenceDataSampler:
         charges_mm = self._point_charges[~molecule_mask][R_cutoff]
 
         if calc_induction:
-            _logger.info("Getting the induction energy.")
+            _logger.debug("Getting the induction energy.")
             external_potentials = _torch.hstack(
                 [_torch.unsqueeze(charges_mm, dim=1), pos_mm]
             )
