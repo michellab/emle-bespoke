@@ -101,7 +101,7 @@ class ReferenceDataSampler:
             self._topology.getNumAtoms(), dtype=_torch.float64, device=self._device
         )
         for i in range(non_bonded_force.getNumParticles()):
-            # charge, sigma, epsilon 
+            # charge, sigma, epsilon
             charge, _, _ = non_bonded_force.getParticleParameters(i)
             point_charges[i] = charge._value
         return point_charges
@@ -329,9 +329,6 @@ class ReferenceDataSampler:
         directory_pc = "pc"
 
         orca_blocks = "%MaxCore 1024\n%pal\nnprocs 16\nend\n"
-        if calc_polarizability:
-            _logger.debug("Adding the polarizability block to the ORCA input.")
-            orca_blocks += "%elprop\nPolar 1\ndipole true\nquadrupole true\nend\n"
 
         # Run the single point QM energy calculation
         _logger.debug("Running the single point QM energy calculation.")
@@ -339,7 +336,9 @@ class ReferenceDataSampler:
             elements=symbols_qm,
             positions=pos_qm,
             directory=directory_vacuum,
-            orca_blocks=orca_blocks,
+            orca_blocks=orca_blocks
+            if not calc_polarizability
+            else orca_blocks + "%elprop\nPolar 1\ndipole true\nquadrupole true\nend\n",
         )
 
         if calc_static:
@@ -396,6 +395,7 @@ class ReferenceDataSampler:
                 positions=pos_qm,
                 orca_external_potentials=external_potentials,
                 directory=directory_pc,
+                orca_blocks=orca_blocks,
             )
 
             e_int = (qm_mm_energy - vacuum_energy) * self._energy_scale

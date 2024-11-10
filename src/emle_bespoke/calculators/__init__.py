@@ -2,4 +2,4 @@
 from ._horton import HortonCalculator
 from ._orca import ORCACalculator
 
-__all__ = ["OrcaCalculator", "HortonCalculator"]
+__all__ = ["ORCACalculator", "HortonCalculator"]
