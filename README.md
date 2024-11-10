@@ -33,7 +33,7 @@ To generate reference data and train a bespoke EMLE model for a specific solute 
 emle-bespoke --solute c1ccccc1
 ```
 
-This command will automatically solvate benzene in a 1000-molecule water box and create a simulation using the default settings.
+This command will automatically solvate benzene in a 1000-molecule cubic water box and create a simulation using the default settings.
 
 To sample the reference configurations using a hybrid mechanically-embedded ML/MM simulation with the ANI-2x model, run:
 
