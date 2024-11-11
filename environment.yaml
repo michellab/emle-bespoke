@@ -19,6 +19,8 @@ dependencies:
   - nnpops
   - pytorch
   - torchani
+  - pygit2
+  - loguru
   - pip:
     - git+https://github.com/chemle/emle-engine.git
     - coloredlogs
