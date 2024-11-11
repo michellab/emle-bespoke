@@ -1,7 +1,8 @@
 """Loss function for the EMLE patched model."""
-from emle.train._loss import _BaseLoss
-from emle.models import EMLE
 import torch as _torch
+from emle.models import EMLE
+from emle.train._loss import _BaseLoss
+
 
 class PatchingLoss(_BaseLoss):
     def __init__(self, emle_model, loss=_torch.nn.MSELoss()):
@@ -9,15 +10,17 @@ class PatchingLoss(_BaseLoss):
 
         if not isinstance(emle_model, EMLE):
             raise TypeError("emle_model must be an instance of EMLE")
-        
+
         self._emle_model = emle_model
 
         if not isinstance(loss, _torch.nn.Module):
             raise TypeError("loss must be an instance of torch.nn.Module")
-        
+
         self._loss = loss
 
-    def forward(self, e_static_target, e_ind_target, atomic_numbers, charges_mm, xyz_qm, xyz_mm):
+    def forward(
+        self, e_static_target, e_ind_target, atomic_numbers, charges_mm, xyz_qm, xyz_mm
+    ):
         """
         Forward pass.
 
@@ -37,7 +40,17 @@ class PatchingLoss(_BaseLoss):
             Positions of MM atoms in Angstrom.
         """
         # Calculate EMLE predictions for static and induced components
-        e_static, e_ind = self._emle_model(atomic_numbers, charges_mm, xyz_qm, xyz_mm)
+        e_static_list = []
+        e_ind_list = []
+        for i in range(len(atomic_numbers)):
+            e_static_i, e_ind_i = self._emle_model(
+                atomic_numbers[i], charges_mm[i], xyz_qm[i], xyz_mm[i]
+            )
+            e_static_list.append(e_static_i)
+            e_ind_list.append(e_ind_i)
+
+        e_static = _torch.stack(e_static_list)
+        e_ind = _torch.stack(e_ind_list)
 
         target = e_static_target + e_ind_target
         values = e_static + e_ind

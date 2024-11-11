@@ -1,5 +1,6 @@
 import torch as _torch
 
+
 def train_model(
     loss_class,
     opt_param_names,
@@ -34,9 +35,7 @@ def train_model(
         Trained model.
     """
 
-    def _train_loop(
-        loss_instance, optimizer, epochs, print_every=10, *args, **kwargs
-    ):
+    def _train_loop(loss_instance, optimizer, epochs, print_every=10, *args, **kwargs):
         """
         Perform the training loop.
 

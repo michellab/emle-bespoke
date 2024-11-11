@@ -1,9 +1,11 @@
 """Patched EMLE model with alpha*static and beta*induced energy components."""
-from emle.models import EMLE as _EMLE
 import torch as _torch
+from emle.models import EMLE as _EMLE
+
 
 class EMLEPatched(_EMLE):
     """EMLE model with alpha*static and beta*induced energy components."""
+
     def __init__(self, alpha=1.0, beta=1.0, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -38,4 +40,3 @@ class EMLEPatched(_EMLE):
         e_static, e_ind = super().forward(atomic_numbers, charges_mm, xyz_qm, xyz_mm)
 
         return self._static_alpha * e_static + self._induced_beta * e_ind
-
