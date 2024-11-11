@@ -5,7 +5,6 @@ import openmm as _mm
 import openmm.unit as _unit
 import torch as _torch
 
-from ._constants import ANGSTROM_TO_BOHR as _ANGSTROM_TO_BOHR
 from ._constants import ATOMIC_NUMBERS_TO_SYMBOLS as _ATOMIC_NUMBERS_TO_SYMBOLS
 
 _logger = _logging.getLogger(__name__)
@@ -38,7 +37,7 @@ class ReferenceDataSampler:
         cutoff=12.0,
         horton_calculator=None,
         energy_scale=1.0,
-        length_scale=_ANGSTROM_TO_BOHR,
+        length_scale=1.0,
         dtype=_torch.float64,
         device=_torch.device("cuda"),
     ):
@@ -223,7 +222,7 @@ class ReferenceDataSampler:
         """
         import pickle
 
-        _logger.debug(f"Writing the reference data to {filename}.")
+        _logger.info(f"Writing reference data to {filename}.")
         with open(filename, "wb") as f:
             pickle.dump(self._reference_data, f)
 
@@ -512,7 +511,7 @@ class ReferenceDataSampler:
             directory_pc=directory_pc,
             orca_blocks=orca_blocks,
             vacuum_energy=vacuum_energy,
-            e_static=self._reference_data["e_static"][-1],
+            e_static=e_static,
             calc_induction=calc_induction,
         )
 
@@ -533,7 +532,6 @@ class ReferenceDataSampler:
         ----------
         steps: int
             Number of steps to sample the system.
-
 
         Returns
         -------
@@ -608,6 +606,9 @@ class ReferenceDataSampler:
             calc_horton=calc_horton,
             calc_polarizability=calc_polarizability,
         )
+
+        _logger.debug(f"E(static) = {e_static}")
+        _logger.debug(f"E(induced) = {e_ind}")
 
         # Add the reference data to the lists
         self._reference_data["z"].append(z_qm)

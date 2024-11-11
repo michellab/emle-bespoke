@@ -270,7 +270,7 @@ class ORCACalculator(BaseCalculator):
         Returns
         -------
         float
-            The single point energy in Hartree.
+            The single point energy in kJ/mol.
         """
         input_file_name = input_file_name or f"{self._name_prefix}.inp"
         output_file_name = output_file_name or f"{self._name_prefix}.out"
@@ -328,7 +328,7 @@ class ORCACalculator(BaseCalculator):
         Returns
         -------
         torch.Tensor (N,)
-            The vpot values in Hartree.
+            The vpot values in kJ/mol/a.u.
         """
         self.write_mesh(mesh, f"{self._name_prefix}.vpot.xyz", directory)
         self._run_process(
@@ -343,7 +343,10 @@ class ORCACalculator(BaseCalculator):
             directory,
         )
 
-        return self.read_vpot(f"{self._name_prefix}.vpot.out", directory)
+        return (
+            self.read_vpot(f"{self._name_prefix}.vpot.out", directory)
+            * self._energy_scale
+        )
 
     def get_mkl(self, directory: str, output_file_name: str = "orca_2mkl.out") -> None:
         """
