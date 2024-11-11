@@ -94,7 +94,7 @@ def create_off_topology(
 
 def create_simulation(
     interchange: _Interchange,
-    temperature: float = 300.0,
+    temperature: float = 298.15,
     pressure: float = 1.0,
     timestep: float = 1.0,
     friction_coefficient: float = 1.0,
@@ -174,6 +174,31 @@ def create_mixed_system(
     return system, context, integrator
 
 
+def remove_constraints(system: _mm.System, atoms: list[int]) -> _mm.System:
+    """
+    Remove constraints involving chosen atoms from the system.
+
+    Parameters
+    ----------
+    system : openmm.System
+        The OpenMM system.
+    atoms : list of int
+        The list of atoms to remove constraints from.
+
+    Returns
+    -------
+    openmm.System
+        The modified OpenMM system.
+    """
+    # Remove constraints involving chosen atoms
+    for i in range(system.getNumConstraints() - 1, -1, -1):
+        p1, p2, _ = system.getConstraintParameters(i)
+        if p1 in atoms or p2 in atoms:
+            system.removeConstraint(i)
+
+    return system
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Generate reference data and train a bespoke EMLE model."
@@ -222,7 +247,7 @@ def main():
     parser.add_argument(
         "--forcefields",
         type=str,
-        default="openff-2.0.0.offxml,tip3p.offxml",
+        default="openff_unconstrained-2.0.0.offxml,tip3p.offxml",
         help="The force field(s) to use, separated by commas.",
     )
     parser.add_argument(
@@ -281,7 +306,7 @@ def main():
         logger.info(line)
     for arg in vars(args):
         logger.info(f"{arg}: {getattr(args, arg)}")
-    logger.info("\n══════════════════════════════════════════════════════════════\n")
+    logger.info("══════════════════════════════════════════════════════════════\n")
 
     # Create topology
     topology_off = create_off_topology(
@@ -309,6 +334,10 @@ def main():
     # Define QM region and train model
     topology = topology_off.to_openmm()
     qm_region = [atom.index for atom in list(topology.chains())[0].atoms()]
+
+    # Remove constraints involving alchemical atoms
+    remove_constraints(simulation.system, qm_region)
+    simulation.context.reinitialize(preserveState=True)
 
     # Create mixed system
     system, context, integrator = create_mixed_system(
