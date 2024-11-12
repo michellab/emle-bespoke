@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e  
+set -e
 
 N_SAMPLES=1000
 ML_MODEL=mace-off23-small
