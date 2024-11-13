@@ -264,6 +264,7 @@ class BespokeModelTrainer:
         charges_mm,
         xyz_qm,
         xyz_mm,
+        model=None,
         lr=0.01,
         epochs=100,
         print_every=10,
@@ -287,6 +288,8 @@ class BespokeModelTrainer:
             Positions of QM atoms in Angstrom.
         xyz_mm: torch.Tensor (NBATCH, N_MM_ATOMS, 3)
             Positions of MM atoms in Angstrom.
+        model: str
+            Filepath to the EMLE model to patch.
         lr : float, optional
             The learning rate. Default is 0.01.
         epochs : int, optional
@@ -296,7 +299,7 @@ class BespokeModelTrainer:
         alpha_static : float, optional
             The initial guess of alpha. Default is 1.0.
         beta_induced : float, optional
-            The initial guess of beta. Default is 1.0.]
+            The initial guess of beta. Default is 1.0.
 
         Returns
         -------
@@ -307,10 +310,18 @@ class BespokeModelTrainer:
         float
             The optimal beta_induced value.
         """
+        import os as _os
+
         import torch as _torch
+        from pkg_resources import resource_filename
 
         from ._train import train_model
         from .patching import EMLEPatched, PatchingLoss
+
+        model = model or resource_filename(
+            "emle_bespoke", "models/emle_qm7_new_ivm0.1.mat"
+        )
+        assert _os.path.isfile(model), f"EMLE model file {model} not found."
 
         msg = r"""
 ╔════════════════════════════════════════════════════════════╗
@@ -322,6 +333,7 @@ class BespokeModelTrainer:
 
         # Create the patched model
         patched_model = EMLEPatched(
+            model=model,
             alpha_static=alpha_static,
             beta_induced=beta_induced,
             device=xyz_mm[0].device,
