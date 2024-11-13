@@ -27,7 +27,8 @@ while IFS=, read -u 9 NAME SMILES; do
     # Remove the previous files
     rm -rf pc vacuum
 
-    emle-bespoke --filename-prefix "${NAME}" --solute "${SMILES}" --n_sample "${N_SAMPLES}" --ml_model "${ML_MODEL}" --n_equilibration "${N_EQUILIBRATION}" > "${NAME}.log" 2> "${NAME}.err" || { echo "Error processing ${NAME}"; continue; }
+    # Run the sampling
+    sbatch sampling.slurm "${NAME}" "${SMILES}" "${N_SAMPLES}" "${ML_MODEL}" "${N_EQUILIBRATION}"
 done
 
 # Close the file descriptor 9
