@@ -6,11 +6,11 @@ from emle.models import EMLE as _EMLE
 class EMLEPatched(_EMLE):
     """EMLE model with alpha*static and beta*induced energy components."""
 
-    def __init__(self, alpha=1.0, beta=1.0, *args, **kwargs):
+    def __init__(self, alpha_static=1.0, beta_induced=1.0, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self._static_alpha = _torch.nn.Parameter(_torch.tensor(alpha))
-        self._induced_beta = _torch.nn.Parameter(_torch.tensor(beta))
+        self.alpha_static = _torch.nn.Parameter(_torch.tensor(alpha_static))
+        self.beta_induced = _torch.nn.Parameter(_torch.tensor(beta_induced))
 
     def forward(self, atomic_numbers, charges_mm, xyz_qm, xyz_mm):
         """
@@ -39,4 +39,4 @@ class EMLEPatched(_EMLE):
         """
         e_static, e_ind = super().forward(atomic_numbers, charges_mm, xyz_qm, xyz_mm)
 
-        return self._static_alpha * e_static + self._induced_beta * e_ind
+        return self.alpha_static * e_static, self.beta_induced * e_ind

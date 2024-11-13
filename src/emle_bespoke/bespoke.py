@@ -61,7 +61,7 @@ class BespokeModelTrainer:
         filename_prefix=None,
         train_mask=None,
         **train_model_kwargs,
-    ):
+    ) -> None:
         """
         Sample reference data and train a bespoke model.
 
@@ -103,7 +103,7 @@ class BespokeModelTrainer:
         # Train the bespoke model
         self.train_model(
             z=self.reference_data["z"],
-            xyz=self.reference_data["xyz"],
+            xyz=self.reference_data["xyz_qm"],
             s=self.reference_data["s"],
             q_core=self.reference_data["q_core"],
             q_val=self.reference_data["q_val"],
@@ -116,7 +116,14 @@ class BespokeModelTrainer:
         )
 
         # Patch the model
-        self.patch_model()
+        self.patch_model(
+            e_static_target=self.reference_data["e_static"],
+            e_ind_target=self.reference_data["e_ind"],
+            atomic_numbers=self.reference_data["z"],
+            charges_mm=self.reference_data["charges_mm"],
+            xyz_qm=self.reference_data["xyz_qm"],
+            xyz_mm=self.reference_data["xyz_mm"],
+        )
 
     def sample_reference_data(
         self,
@@ -226,7 +233,7 @@ class BespokeModelTrainer:
 
         msg = r"""
 ╔════════════════════════════════════════════════════════════╗
-║         Starting training of bespoke EMLE model....        ║
+║         Starting training of bespoke EMLE model...         ║
 ╚════════════════════════════════════════════════════════════╝
 """
         for line in msg.split("\n"):
@@ -249,37 +256,99 @@ class BespokeModelTrainer:
 
         return trainer
 
-    def patch_model(self):
-        pass
-
-    '''
-    def patch_model(self, lr=0.01, epochs=100, print_every=10):
+    def patch_model(
+        self,
+        e_static_target,
+        e_ind_target,
+        atomic_numbers,
+        charges_mm,
+        xyz_qm,
+        xyz_mm,
+        lr=0.01,
+        epochs=100,
+        print_every=10,
+        alpha_static=1.0,
+        beta_induced=1.0,
+    ):
         """
         Patch the model by finding optimal alpha and beta values.
+
+        Parameters
+        ----------
+        e_static_target: list of torch.Tensor (NBATCH,)
+            Target static energy component in kJ/mol.
+        e_ind_target: list of torch.Tensor (NBATCH,)
+            Target induced energy component in kJ/mol.
+        atomic_numbers: torch.Tensor (NBATCH, N_QM_ATOMS)
+            Atomic numbers of QM atoms.
+        charges_mm: torch.Tensor (NBATCH, max_mm_atoms)
+            MM point charges in atomic units.
+        xyz_qm: torch.Tensor (NBATCH, N_QM_ATOMS, 3)
+            Positions of QM atoms in Angstrom.
+        xyz_mm: torch.Tensor (NBATCH, N_MM_ATOMS, 3)
+            Positions of MM atoms in Angstrom.
+        lr : float, optional
+            The learning rate. Default is 0.01.
+        epochs : int, optional
+            The number of epochs. Default is 100.
+        print_every : int, optional
+            The number of steps between each print. Default is 10.
+        alpha_static : float, optional
+            The initial guess of alpha. Default is 1.0.
+        beta_induced : float, optional
+            The initial guess of beta. Default is 1.0.]
+
+        Returns
+        -------
+        EMLEPatched
+            The patched EMLE model.
+        float
+            The optimal alpha_static value.
+        float
+            The optimal beta_induced value.
         """
+        import torch as _torch
+
         from ._train import train_model
         from .patching import EMLEPatched, PatchingLoss
 
-        model = EMLEPatched(
-            alpha=1.0,
-            beta=1.0,
-            emle_model=self._emle_base,
+        msg = r"""
+╔════════════════════════════════════════════════════════════╗
+║                 Patching the EMLE model...                 ║
+╚════════════════════════════════════════════════════════════╝
+"""
+        for line in msg.split("\n"):
+            logger.info(line)
+
+        # Create the patched model
+        patched_model = EMLEPatched(
+            alpha_static=alpha_static,
+            beta_induced=beta_induced,
+            device=xyz_mm[0].device,
+            dtype=xyz_mm[0].dtype,
         )
 
-        loss = PatchingLoss
-
+        # Patch the model
         train_model(
-            loss_class=loss,
-            opt_param_names=["static_alpha", "induced_beta"],
+            loss_class=PatchingLoss,
+            opt_param_names=["alpha_static", "beta_induced"],
             lr=lr,
             epochs=epochs,
             print_every=print_every,
-            emle_model=model,
-            e_static_target,
-            e_ind_target,
-            atomic_numbers,
-            charges_mm,
-            xyz_qm,
-            xyz_mm
+            emle_model=patched_model,
+            e_static_target=_torch.stack(e_static_target),
+            e_ind_target=_torch.stack(e_ind_target),
+            atomic_numbers=atomic_numbers,
+            charges_mm=charges_mm,
+            xyz_qm=xyz_qm,
+            xyz_mm=xyz_mm,
         )
-    '''
+
+        alpha_static = patched_model.alpha_static.item()
+        beta_induced = patched_model.beta_induced.item()
+
+        logger.info(f"Optimal alpha_static: {alpha_static}")
+        logger.info(f"Optimal beta_induced: {beta_induced}")
+        logger.info("Finished patching the model.")
+
+        return patched_model, alpha_static, beta_induced

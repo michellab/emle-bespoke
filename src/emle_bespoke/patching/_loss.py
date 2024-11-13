@@ -3,6 +3,8 @@ import torch as _torch
 from emle.models import EMLE
 from emle.train._loss import _BaseLoss
 
+from .._constants import HARTREE_TO_KJ_MOL
+
 
 class PatchingLoss(_BaseLoss):
     def __init__(self, emle_model, loss=_torch.nn.MSELoss()):
@@ -49,8 +51,8 @@ class PatchingLoss(_BaseLoss):
             e_static_list.append(e_static_i)
             e_ind_list.append(e_ind_i)
 
-        e_static = _torch.stack(e_static_list)
-        e_ind = _torch.stack(e_ind_list)
+        e_static = _torch.stack(e_static_list) * HARTREE_TO_KJ_MOL
+        e_ind = _torch.stack(e_ind_list) * HARTREE_TO_KJ_MOL
 
         target = e_static_target + e_ind_target
         values = e_static + e_ind
