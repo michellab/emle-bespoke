@@ -41,8 +41,8 @@ version: {}
 # Filter to block loggers not starting with "emle_bespoke"
 class BlockFilter:
     def __call__(self, record):
-        """Filter loggers not starting with 'emle_bespoke'."""
-        return record["name"].startswith("emle_bespoke")
+        """Filter loggers not starting with 'emle_bespoke' or 'emle'."""
+        return record["name"].startswith(("emle_bespoke", "emle"))
 
 
 # Configure the logger for the emle_bespoke package

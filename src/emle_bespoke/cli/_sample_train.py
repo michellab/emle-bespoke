@@ -361,6 +361,13 @@ def main():
     )
     emle_bespoke.sample_and_train_model(n_samples=args.n_samples, n_steps=args.n_steps)
 
+    msg = r"""
+╔════════════════════════════════════════════════════════════╗
+║              emle-bespoke terminated normally!             ║
+╚════════════════════════════════════════════════════════════╝"""
+    for line in msg.split("\n"):
+        _logger.info(line)
+
 
 if __name__ == "__main__":
     main()
