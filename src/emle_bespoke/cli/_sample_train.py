@@ -362,7 +362,7 @@ def main():
     emle_bespoke = _BespokeModelTrainer(
         ref_sampler, filename_prefix=args.filename_prefix
     )
-    emle_bespoke.train_model(n_samples=args.n_samples, n_steps=args.n_steps)
+    emle_bespoke.sample_and_train_model(n_samples=args.n_samples, n_steps=args.n_steps)
 
 
 if __name__ == "__main__":
