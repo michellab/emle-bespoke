@@ -1,8 +1,9 @@
-import pickle
 import logging
-from typing import Dict, Any
+import pickle
+from typing import Any, Dict
 
 _logger = logging.getLogger(__name__)
+
 
 class ReferenceData:
     def __init__(self, data: Dict = None):
@@ -69,7 +70,7 @@ class ReferenceData:
         ----------
         key : str
             The key to check for existence in the reference data.
-        
+
         Returns
         -------
         bool
@@ -117,19 +118,21 @@ class ReferenceData:
         dict
             The loaded reference data.
         """
-        _logger.debug(f"Reading reference data from {filename} with overwrite={overwrite}.")
-        
+        _logger.debug(
+            f"Reading reference data from {filename} with overwrite={overwrite}."
+        )
+
         try:
             with open(filename, "rb") as f:
                 data = pickle.load(f)
-            
+
             if overwrite or not self._reference_data:
                 self._reference_data = data
             else:
                 self._extend_data(data)
-                
+
             return self._reference_data
-        
+
         except FileNotFoundError:
             _logger.warning(f"File {filename} not found. Returning existing data.")
             return self._reference_data
@@ -148,7 +151,7 @@ class ReferenceData:
         """
         for key, value in new_data.items():
             self._reference_data.setdefault(key, []).extend(value)
-    
+
     def get_data(self) -> Dict:
         """
         Get the current reference data.
