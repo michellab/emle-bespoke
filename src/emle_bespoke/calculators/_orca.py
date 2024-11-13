@@ -1,13 +1,11 @@
-import logging as _logging
 import os as _os
 from typing import Union
 
 import torch as _torch
+from loguru import logger as _logger
 
 from .._constants import ANGSTROM_TO_BOHR, HARTREE_TO_KJ_MOL
 from ._base import BaseCalculator
-
-_logger = _logging.getLogger(__name__)
 
 
 class ORCACalculator(BaseCalculator):

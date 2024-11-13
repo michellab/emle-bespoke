@@ -2,7 +2,6 @@
 
 # General imports
 import argparse
-import logging
 import re
 from copy import deepcopy
 from typing import Any, Dict, Optional, Tuple
@@ -11,6 +10,7 @@ from typing import Any, Dict, Optional, Tuple
 import openmm as _mm
 import openmm.app as _app
 import openmm.unit as _unit
+from loguru import logger as _logger
 from openff.interchange import Interchange as _Interchange
 from openff.interchange.components._packmol import UNIT_CUBE as _UNIT_CUBE
 from openff.interchange.components._packmol import pack_box as _pack_box
@@ -35,9 +35,6 @@ PACKMOL_KWARGS = {
     "target_density": 1.0 * _offunit.gram / _offunit.milliliter,
 }
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
 
 def is_mapped_smiles(smiles: str) -> bool:
     """Check if the given SMILES string is a mapped SMILES."""
@@ -52,7 +49,7 @@ def create_molecule(smiles: str) -> _Molecule:
             return _Molecule.from_mapped_smiles(smiles)
         return _Molecule.from_smiles(smiles)
     except Exception as e:
-        logger.error(f"Failed to create molecule from SMILES '{smiles}': {e}")
+        _logger.error(f"Failed to create molecule from SMILES '{smiles}': {e}")
         raise
 
 
@@ -65,13 +62,13 @@ def create_off_topology(
 ) -> _Topology:
     """Create an OpenFF topology for a system with solute and solvent molecules."""
     try:
-        logger.info("Creating OpenFF topology.")
-        logger.info(f"Number of solute molecules: {n_solute}")
-        logger.info(f"Number of solvent molecules: {n_solvent}")
-        logger.info(f"Solute SMILES: {solute_smiles}")
-        logger.info(f"Solvent SMILES: {solvent_smiles}")
+        _logger.info("Creating OpenFF topology.")
+        _logger.info(f"Number of solute molecules: {n_solute}")
+        _logger.info(f"Number of solvent molecules: {n_solvent}")
+        _logger.info(f"Solute SMILES: {solute_smiles}")
+        _logger.info(f"Solvent SMILES: {solvent_smiles}")
         for key, value in (packmol_kwargs or PACKMOL_KWARGS).items():
-            logger.info(f"Packmol kwarg: {key} = {value}")
+            _logger.info(f"Packmol kwarg: {key} = {value}")
 
         solute = create_molecule(solute_smiles)
         if n_solvent == 0 or solvent_smiles is None:
@@ -88,7 +85,7 @@ def create_off_topology(
             **(packmol_kwargs or PACKMOL_KWARGS),
         )
     except Exception as e:
-        logger.error(f"Failed to create OpenFF topology: {e}")
+        _logger.error(f"Failed to create OpenFF topology: {e}")
         raise RuntimeError(f"Failed to create OpenFF topology: {e}")
 
 
@@ -101,11 +98,11 @@ def create_simulation(
 ) -> _app.Simulation:
     """Create an OpenMM simulation from the provided interchange object."""
     try:
-        logger.info("Creating OpenMM simulation.")
-        logger.info(f"Temperature: {temperature} K")
-        logger.info(f"Pressure: {pressure} bar")
-        logger.info(f"Timestep: {timestep} fs")
-        logger.info(f"Friction coefficient: {friction_coefficient} ps^-1")
+        _logger.info("Creating OpenMM simulation.")
+        _logger.info(f"Temperature: {temperature} K")
+        _logger.info(f"Pressure: {pressure} bar")
+        _logger.info(f"Timestep: {timestep} fs")
+        _logger.info(f"Friction coefficient: {friction_coefficient} ps^-1")
 
         integrator = _mm.LangevinIntegrator(
             temperature * _unit.kelvin,
@@ -130,7 +127,7 @@ def create_simulation(
 
         return simulation
     except Exception as e:
-        logger.error(f"Failed to create OpenMM simulation: {e}")
+        _logger.error(f"Failed to create OpenMM simulation: {e}")
         raise RuntimeError(f"Failed to create OpenMM simulation: {e}")
 
 
@@ -155,7 +152,7 @@ def create_mixed_system(
         The OpenMM system, context, and integrator instances.
     """
     if ml_model:
-        logger.info(f"Creating mixed system with ML model '{ml_model}'.")
+        _logger.info(f"Creating mixed system with ML model '{ml_model}'.")
         potential = _MLPotential(ml_model)
         integrator = deepcopy(simulation.integrator)
         system = potential.createMixedSystem(
@@ -166,7 +163,7 @@ def create_mixed_system(
             simulation.context.getState(getPositions=True).getPositions()
         )
     else:
-        logger.info("No ML model provided. Using the original MM system.")
+        _logger.info("No ML model provided. Using the original MM system.")
         system = simulation.system
         context = simulation.context
         integrator = simulation.integrator
@@ -284,14 +281,14 @@ def main():
     try:
         args = parser.parse_args()
     except argparse.ArgumentError as e:
-        logger.error(f"Error: {e}")
+        _logger.error(f"Error: {e}")
     except SystemExit as e:
-        logger.error(f"Unrecognized argument(s) detected: {e}")
+        _logger.error(f"Unrecognized argument(s) detected: {e}")
         exit(1)
 
     # Validation of critical arguments
     if args.n_solvent < 0 or args.n_solute < 0:
-        logger.error("n_solvent and n_solute must be non-negative.")
+        _logger.error("n_solvent and n_solute must be non-negative.")
         return
 
     _log_banner()
@@ -303,10 +300,10 @@ def main():
 ╚════════════════════════════════════════════════════════════╝
 """
     for line in msg.split("\n"):
-        logger.info(line)
+        _logger.info(line)
     for arg in vars(args):
-        logger.info(f"{arg}: {getattr(args, arg)}")
-    logger.info("══════════════════════════════════════════════════════════════\n")
+        _logger.info(f"{arg}: {getattr(args, arg)}")
+    _logger.info("══════════════════════════════════════════════════════════════\n")
 
     # Create topology
     topology_off = create_off_topology(
@@ -345,7 +342,7 @@ def main():
     )
 
     if args.n_equilibration:
-        logger.info(f"Running {args.n_equilibration} equilibration steps.")
+        _logger.info(f"Running {args.n_equilibration} equilibration steps.")
         context.setVelocitiesToTemperature(args.temperature * _unit.kelvin)
         integrator.step(args.n_equilibration)
 

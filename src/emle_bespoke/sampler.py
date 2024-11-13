@@ -1,15 +1,13 @@
-import logging as _logging
 import time
 from typing import Any, Tuple
 
 import openmm as _mm
 import openmm.unit as _unit
 import torch as _torch
+from loguru import logger as _logger
 
 from ._constants import ATOMIC_NUMBERS_TO_SYMBOLS as _ATOMIC_NUMBERS_TO_SYMBOLS
 from .reference_data import ReferenceData as _ReferenceData
-
-_logger = _logging.getLogger(__name__)
 
 
 class ReferenceDataSampler:
@@ -533,7 +531,7 @@ class ReferenceDataSampler:
         directory_vacuum = "vacuum"
         directory_pc = "pc"
 
-        orca_blocks = "%MaxCore 1024\n%pal\nnprocs 16\nend\n"
+        orca_blocks = "%MaxCore 1024\n%pal\nnprocs 8\nend\n"
 
         # Run the single point QM energy calculation
         charges_mm = self._point_charges[~molecule_mask][R_cutoff]

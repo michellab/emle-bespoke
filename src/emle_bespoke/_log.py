@@ -1,15 +1,14 @@
-"""Logging configuration for the emle-bespoke package."""
-import logging
-import logging.config
-import os
+import os as _os
+import sys as _sys
 
-logger = logging.getLogger(__name__)
+from loguru import logger
+
+from ._version import get_versions
 
 
+# Print the banner with the emle-bespoke logo
 def log_banner() -> None:
     """Print a banner with the emle-bespoke logo."""
-    from ._version import get_versions
-
     version = get_versions()["version"]
     banner = r"""
 ╔══════════════════════════════════════════════════════╗
@@ -30,64 +29,37 @@ def log_banner() -> None:
 ║                                                      ║
 ╚══════════════════════════════════════════════════════╝
 version: {}
-
 """.format(
         version
     )
 
-    lines = banner.split("\n")
-
-    # Iterate over each line and log them
-    for line in lines[1:-1]:
+    # Log each line of the banner
+    for line in banner.split("\n")[1:-1]:
         logger.info(line)
 
 
-class BlockFilter(logging.Filter):
-    """Filter to block loggers not starting with emle_bespoke."""
+# Filter to block loggers not starting with "emle_bespoke"
+class BlockFilter:
+    def __call__(self, record):
+        """Filter loggers not starting with 'emle_bespoke'."""
+        return record["name"].startswith("emle_bespoke")
 
-    def filter(self, record):
-        """Filter loggers not starting with emle_bespoke."""
-        return record.name.startswith("emle_bespoke")
 
-
+# Configure the logger for the emle_bespoke package
 def config_logger() -> None:
     """Configure the logger for the emle_bespoke package."""
-    # Define log level
-    log_level = os.environ.get("EMLE_BESPOKE_LOG_LEVEL", default="INFO").upper()
-    silence_loggers = int(os.environ.get("EMLE_BESPOKE_FILTER_LOGGERS", default=1))
+    log_level = _os.environ.get("EMLE_BESPOKE_LOG_LEVEL", default="INFO").upper()
+    silence_loggers = int(_os.environ.get("EMLE_BESPOKE_FILTER_LOGGERS", default=1))
 
-    fmt = "%(asctime)s %(levelname)-8s %(name)-40s %(message)s"
-    datefmt = "%Y-%m-%d %H:%M:%S"
+    fmt = "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name:35}</cyan> | {message}"
 
-    # Set up basicConfig
-    LOGGING = {
-        "version": 1,
-        "disable_existing_loggers": False,
-        "formatters": {"default": {"format": fmt, "datefmt": datefmt}},
-        "handlers": {
-            "stdout": {
-                "class": "logging.StreamHandler",
-                "stream": "ext://sys.stdout",
-                "formatter": "default",
-            }
-        },
-        "loggers": {
-            "": {"handlers": ["stdout"], "level": log_level},
-        },
-    }
-
-    logging.config.dictConfig(LOGGING)
-
-    try:
-        import coloredlogs
-
-        coloredlogs.install(level=getattr(logging, log_level), fmt=fmt, datefmt=datefmt)
-    except ImportError:
-        pass
-
-    if silence_loggers:
-        for handler in logging.getLogger().handlers:
-            handler.addFilter(BlockFilter())
+    logger.remove()  # Remove the default handler
+    logger.add(
+        _sys.stdout,
+        format=fmt,
+        level=log_level,
+        filter=BlockFilter() if silence_loggers else None,
+    )
 
 
 config_logger()

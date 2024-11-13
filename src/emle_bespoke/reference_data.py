@@ -1,8 +1,7 @@
-import logging
 import pickle
 from typing import Any, Dict
 
-_logger = logging.getLogger(__name__)
+from loguru import logger as _logger
 
 
 class ReferenceData:

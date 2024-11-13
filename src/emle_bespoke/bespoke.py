@@ -1,11 +1,8 @@
-import logging as _logging
-
 from emle.models import EMLEBase as _EMLEBase
+from loguru import logger as _logger
 
 from .reference_data import ReferenceData as _ReferenceData
 from .sampler import ReferenceDataSampler as _ReferenceDataSampler
-
-logger = _logging.getLogger(__name__)
 
 
 class BespokeModelTrainer:
@@ -43,7 +40,7 @@ class BespokeModelTrainer:
             self.reference_sampler
             and self.reference_data is not self.reference_sampler.reference_data
         ):
-            logger.warning(
+            _logger.warning(
                 "Reference data instances are not the same in ReferenceDataSampler and ReferenceData."
             )
 
@@ -165,11 +162,11 @@ class BespokeModelTrainer:
 ╚════════════════════════════════════════════════════════════╝
 """
         for line in msg.split("\n"):
-            logger.info(line)
-        logger.info(f"Number of samples to sample: {n_samples}")
-        logger.info(f"Number of steps per sample: {n_steps}")
+            _logger.info(line)
+        _logger.info(f"Number of samples to sample: {n_samples}")
+        _logger.info(f"Number of steps per sample: {n_steps}")
         for i in range(n_samples):
-            logger.info(f"Sampling {i + 1}/{n_samples} configurations.")
+            _logger.info(f"Sampling {i + 1}/{n_samples} configurations.")
             self.reference_sampler.sample(
                 n_steps=n_steps,
                 calc_static=calc_static,
@@ -178,7 +175,7 @@ class BespokeModelTrainer:
                 calc_polarizability=calc_polarizability,
             )
 
-        logger.info("Finished sampling reference data.")
+        _logger.info("Finished sampling reference data.")
 
         # Write the reference data to a file
         self.reference_sampler.reference_data.write(filename=ref_data_filename)
@@ -237,7 +234,7 @@ class BespokeModelTrainer:
 ╚════════════════════════════════════════════════════════════╝
 """
         for line in msg.split("\n"):
-            logger.info(line)
+            _logger.info(line)
 
         trainer = _EMLETrainer(self._emle_base)
 
@@ -329,7 +326,7 @@ class BespokeModelTrainer:
 ╚════════════════════════════════════════════════════════════╝
 """
         for line in msg.split("\n"):
-            logger.info(line)
+            _logger.info(line)
 
         # Create the patched model
         patched_model = EMLEPatched(
@@ -359,8 +356,8 @@ class BespokeModelTrainer:
         alpha_static = patched_model.alpha_static.item()
         beta_induced = patched_model.beta_induced.item()
 
-        logger.info(f"Optimal alpha_static: {alpha_static}")
-        logger.info(f"Optimal beta_induced: {beta_induced}")
-        logger.info("Finished patching the model.")
+        _logger.info(f"Optimal alpha_static: {alpha_static}")
+        _logger.info(f"Optimal beta_induced: {beta_induced}")
+        _logger.info("Finished patching the model.")
 
         return patched_model, alpha_static, beta_induced
