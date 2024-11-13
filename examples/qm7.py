@@ -1,3 +1,17 @@
+"""
+### Data Required for This Example:
+1. Download the following files:
+    - QM7_B3LYP_cc-pVTZ_horton.tgz
+      wget https://zenodo.org/record/7051785/files/QM7_B3LYP_cc-pVTZ_horton.tgz
+    - QM7_B3LYP_cc-pVTZ.tgz
+      wget https://zenodo.org/record/7051785/files/QM7_B3LYP_cc-pVTZ.tgz
+    - qm7.mat
+      wget http://quantum-machine.org/data/qm7.mat
+
+### References:
+- Github: https://github.com/emedio/embedding
+- Dataset: https://zenodo.org/records/7051785
+"""
 import io
 import tarfile
 
@@ -30,13 +44,23 @@ def get_alpha_by_id(id_, orca_tgz):
     return parse_orca_out(orca_tgz.extractfile(f"{id_}.out"))
 
 
+_HORTON_KEYS = (
+    "cartesian_multipoles",
+    "core_charges",
+    "valence_charges",
+    "valence_widths",
+)
+
+
 def parse_horton_out(f):
-    q_shift = np.mean(f["cartesian_multipoles"][:, 0])
+    data = {key: f[key][:] for key in _HORTON_KEYS}
+    q = data["core_charges"] + data["valence_charges"]
+    q_shift = np.sum(np.round(q) - q) / len(q)
     return {
-        "s": f["valence_widths"][:],
-        "q_core": f["core_charges"][:],
-        "q": f["cartesian_multipoles"][:, 0] - q_shift,
-        "v": f["radial_moments"][:, 3],
+        "s": data["valence_widths"],
+        "q_core": data["core_charges"],
+        "q_val": data["valence_charges"] + q_shift,
+        "mu": data["cartesian_multipoles"][:, 1:4],
     }
 
 
@@ -65,10 +89,8 @@ def zip_list_of_dicts(l):
 if __name__ == "__main__":
     READ_MAT = True
 
-    orca_tgz = (
-        "/home/joaomorado/repos/emle-engine-kirill/test_folder/QM7_B3LYP_cc-pVTZ.tgz"
-    )
-    horton_tgz = "/home/joaomorado/repos/emle-engine-kirill/test_folder/QM7_B3LYP_cc-pVTZ_horton.tgz"
+    orca_tgz = "QM7_B3LYP_cc-pVTZ.tgz"
+    horton_tgz = "QM7_B3LYP_cc-pVTZ_horton.tgz"
 
     # Load QM7 data
     qm7_data = scipy.io.loadmat("qm7.mat", squeeze_me=True)
@@ -106,12 +128,9 @@ if __name__ == "__main__":
         xyz=xyz,
         s=horton_data["s"],
         q_core=horton_data["q_core"],
-        q=horton_data["q"],
+        q_val=horton_data["q_val"],
         alpha=alpha,
-        train_mask=torch.arange(n_mols) % 5 == 0,
+        train_mask=torch.arange(n_mols) % 2 == 0,
         device=torch.device("cuda"),
-        alpha_mode="reference",
-        epochs=100,
-        ivm_thr=0.025,
-        sigma=1e-4,
+        epochs=250,
     )
