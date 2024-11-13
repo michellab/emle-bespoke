@@ -1,11 +1,13 @@
 import logging as _logging
 import time
+from typing import Any, Tuple
 
 import openmm as _mm
 import openmm.unit as _unit
 import torch as _torch
 
 from ._constants import ATOMIC_NUMBERS_TO_SYMBOLS as _ATOMIC_NUMBERS_TO_SYMBOLS
+from .reference_data import ReferenceData as _ReferenceData
 
 _logger = _logging.getLogger(__name__)
 
@@ -34,6 +36,7 @@ class ReferenceDataSampler:
         topology,
         qm_region,
         qm_calculator,
+        reference_data=None,
         cutoff=12.0,
         horton_calculator=None,
         energy_scale=1.0,
@@ -60,19 +63,7 @@ class ReferenceDataSampler:
         self._horton_calculator = horton_calculator
 
         # Reference data lists
-        self._reference_data = {
-            "z": [],
-            "xyz_qm": [],
-            "s": [],
-            "mu": [],
-            "q_core": [],
-            "q_val": [],
-            "alpha": [],
-            "xyz_mm": [],
-            "charges_mm": [],
-            "e_static": [],
-            "e_ind": [],
-        }
+        self._reference_data = reference_data if reference_data else _ReferenceData()
 
         # Device and dtype
         self._dtype = dtype
@@ -210,51 +201,6 @@ class ReferenceDataSampler:
             f.write(f"Written by emle-spoke on {time.strftime('%Y-%m-%d %H:%M:%S')} \n")
             for element, position in zip(elements, positions):
                 f.write(f"{element} {position[0]} {position[1]} {position[2]}\n")
-
-    def write_data(self, filename: str = "ref_data.pkl") -> None:
-        """
-        Write the reference data to a file in pickle format.
-
-        Parameters
-        ----------
-        filename: str
-            Filename.
-        """
-        import pickle
-
-        _logger.info(f"Writing reference data to {filename}.")
-        with open(filename, "wb") as f:
-            pickle.dump(self._reference_data, f)
-
-    def read_data(self, filename: str = "ref_data.pkl", overwrite: bool = True) -> dict:
-        """
-        Read the reference data from a file in pickle format.
-
-        Parameters
-        ----------
-        filename: str
-            Filename.
-        overwrite: bool
-            Overwrite the current reference data.
-
-        Returns
-        -------
-        reference_data: dict
-            Reference data.
-        """
-        import pickle
-
-        _logger.debug(
-            f"Reading the reference data from {filename} with overwrite set to {overwrite}."
-        )
-        with open(filename, "rb") as f:
-            data = pickle.load(f)
-            if overwrite or not self._reference_data:
-                self._reference_data = data
-            else:
-                for key in self._reference_data.keys():
-                    self._reference_data[key].extend(data[key])
-        return self._reference_data
 
     def get_static_energy(
         self,
@@ -439,7 +385,7 @@ class ReferenceDataSampler:
         calc_induction: bool = True,
         calc_horton: bool = True,
         calc_polarizability: bool = True,
-    ) -> dict:
+    ) -> Tuple[Any, Any, Any, Any]:
         """
         Get the reference data.
 
@@ -519,7 +465,7 @@ class ReferenceDataSampler:
 
     def sample(
         self,
-        steps: int,
+        n_steps: int,
         calc_static: bool = True,
         calc_induction: bool = True,
         calc_horton: bool = True,
@@ -530,7 +476,7 @@ class ReferenceDataSampler:
 
         Parameters
         ----------
-        steps: int
+        n_steps: int
             Number of steps to sample the system.
 
         Returns
@@ -543,10 +489,10 @@ class ReferenceDataSampler:
         ), "The horton calculator must be provided if the horton partitioning is to be calculated."
 
         _logger.debug("Sampling a new configuration.")
-        _logger.debug(f"Number of integration steps: {steps}")
+        _logger.debug(f"Number of integration steps: {n_steps}")
 
         # Integrate for a given number of steps
-        self._integrator.step(steps)
+        self._integrator.step(n_steps)
 
         # Get the positions, box vectors, and energy before EMLE to ensure correct positions
         state = self._context.getState(getPositions=True, getEnergy=True)
@@ -611,16 +557,16 @@ class ReferenceDataSampler:
         _logger.debug(f"E(induced) = {e_ind}")
 
         # Add the reference data to the lists
-        self._reference_data["z"].append(z_qm)
-        self._reference_data["xyz_qm"].append(pos_qm * self._length_scale)
-        self._reference_data["alpha"].append(polarizability)
-        self._reference_data["xyz_mm"].append(pos_mm * self._length_scale)
-        self._reference_data["charges_mm"].append(charges_mm)
-        self._reference_data["s"].append(horton_data["s"])
-        self._reference_data["mu"].append(horton_data["mu"])
-        self._reference_data["q_core"].append(horton_data["q_core"])
-        self._reference_data["q_val"].append(horton_data["q_val"])
-        self._reference_data["e_static"].append(e_static)
-        self._reference_data["e_ind"].append(e_ind)
+        self._reference_data.add_data_to_key("z", z_qm)
+        self._reference_data.add_data_to_key("xyz_qm", pos_qm * self._length_scale)
+        self._reference_data.add_data_to_key("alpha", polarizability)
+        self._reference_data.add_data_to_key("xyz_mm", pos_mm * self._length_scale)
+        self._reference_data.add_data_to_key("charges_mm", charges_mm)
+        self._reference_data.add_data_to_key("s", horton_data["s"])
+        self._reference_data.add_data_to_key("mu", horton_data["mu"])
+        self._reference_data.add_data_to_key("q_core", horton_data["q_core"])
+        self._reference_data.add_data_to_key("q_val", horton_data["q_val"])
+        self._reference_data.add_data_to_key("e_static", e_static)
+        self._reference_data.add_data_to_key("e_ind", e_ind)
 
         return self._reference_data
