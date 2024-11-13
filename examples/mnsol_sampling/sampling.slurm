@@ -14,4 +14,4 @@ ML_MODEL=$4
 N_EQUILIBRATION=$5
 
 # Export environmental variables
-emle-bespoke --filename-prefix "${NAME}" --solute "${SMILES}" --n_sample "${N_SAMPLES}" --ml_model "${ML_MODEL}" --n_equilibration "${N_EQUILIBRATION}" > "${NAME}.log" 2> "${NAME}.err" 
+emle-bespoke --filename-prefix "${NAME}" --solute "${SMILES}" --n_sample "${N_SAMPLES}" --ml_model "${ML_MODEL}" --n_equilibration "${N_EQUILIBRATION}" > "${NAME}.log" 2> "${NAME}.err"
