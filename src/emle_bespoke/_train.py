@@ -1,4 +1,5 @@
 import torch as _torch
+from loguru import logger as _logger
 
 
 def train_model(
@@ -66,7 +67,7 @@ def train_model(
             loss.backward(retain_graph=True)
             optimizer.step()
             if (epoch + 1) % print_every == 0:
-                print(
+                _logger.info(
                     f"Epoch {epoch+1}: Loss ={loss.item():9.4f}    "
                     f"RMSE ={rmse.item():9.4f}    "
                     f"Max Error ={max_error.item():9.4f}"
