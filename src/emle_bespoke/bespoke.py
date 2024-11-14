@@ -109,6 +109,9 @@ class BespokeModelTrainer:
             model_filename=f"{filename_prefix}_model.mat"
             if filename_prefix
             else f"{self._filename_prefix}_model.mat",
+            plot_data_filename=f"{filename_prefix}_plot_data.mat"
+            if filename_prefix
+            else f"{self._filename_prefix}_plot_data.mat",
             **train_model_kwargs,
         )
 
@@ -192,6 +195,7 @@ class BespokeModelTrainer:
         alpha,
         train_mask,
         model_filename,
+        plot_data_filename,
         *args,
         **kwargs,
     ):
@@ -216,6 +220,8 @@ class BespokeModelTrainer:
             The mask to use for training.
         model_filename : str
             The filename to save the model.
+        plot_data_filename : str, optional
+            The filename to save the plot data.
         args : list
             Additional positional arguments to pass to the trainer.
         kwargs : dict
@@ -247,6 +253,7 @@ class BespokeModelTrainer:
             alpha=alpha,
             train_mask=train_mask,
             model_filename=model_filename,
+            plot_data_filename=plot_data_filename,
             *args,
             **kwargs,
         )
@@ -263,7 +270,7 @@ class BespokeModelTrainer:
         xyz_mm,
         model=None,
         lr=0.01,
-        epochs=100,
+        epochs=500,
         print_every=10,
         alpha_static=1.0,
         beta_induced=1.0,
