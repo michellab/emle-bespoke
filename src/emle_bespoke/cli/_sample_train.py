@@ -71,11 +71,15 @@ def create_off_topology(
             _logger.info(f"Packmol kwarg: {key} = {value}")
 
         solute = create_molecule(solute_smiles)
+        if n_solute > 0:
+            for atom in solute.atoms:
+                atom.metadata["residue_name"] = "LIG"
+
         if n_solvent == 0 or solvent_smiles is None:
             return solute.to_topology()
 
         solvent = create_molecule(solvent_smiles)
-        if solvent_smiles == "[H:2][O:1][H:3]":  # Handle water case
+        if solvent_smiles == "[H:2][O:1][H:3]" and n_solvent > 0:
             for atom in solvent.atoms:
                 atom.metadata["residue_name"] = "HOH"
 
