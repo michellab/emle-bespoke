@@ -1,6 +1,5 @@
 """Miscellaneous utility functions for LJ fitting."""
-from openff.toolkit import Molecule as _Molecule
-from openff.toolkit.topology import Topology as _Topology
+from typing import Any, List, Tuple, Union
 
 
 def get_unique_atoms(topology, res_name="LIG"):
@@ -86,23 +85,50 @@ def get_water_mapping(topology, res_name="LIG"):
     return water_mapping
 
 
-def create_dimer_topology(ligand_smiles, water_smiles):
-    # Convert the SMILES strings to _Molecule objects
-    ligand = _Molecule.from_smiles(ligand_smiles)
-    water = _Molecule.from_mapped_smiles(water_smiles)
+def unique_with_delta(lst: list, delta: float):
+    """
+    Get unique values in a list with a specified tolerance.
 
-    # Assign residue names
-    for atom in ligand.atoms:
-        atom.metadata["residue_name"] = "LIG"
+    Parameters
+    ----------
+    lst : list
+        List of values to check for uniqueness.
+    delta : float
+        Tolerance for uniqueness.
 
-    for atom in water.atoms:
-        atom.metadata["residue_name"] = "HOH"
+    Returns
+    -------
+    unique_values : list
+        List of unique values.
+    unique_idx : list
+        List of indices of unique values.
+    """
+    unique_values = []
+    unique_idx = []
+    for i, value in enumerate(lst):
+        if not any(abs(value - unique) <= delta for unique in unique_values):
+            unique_values.append(value)
+            unique_idx.append(i)
+    return unique_values, unique_idx
 
-    # Generate conformers
-    ligand.generate_conformers(n_conformers=1)
-    water.generate_conformers(n_conformers=1)
 
-    # Create the topology
-    topology = _Topology.from_molecules([ligand, water])
+def sort_two_lists(list1: List[Any], list2: List[Any]) -> Tuple[List[Any], List[Any]]:
+    """
+    Sort two lists based on the values in the first list.
 
-    return topology
+    Parameters
+    ----------
+    list1 : list
+        List of values to sort by.
+    list2 : list
+        List to sort.
+
+    Returns
+    -------
+    sorted_list1 : list
+        Sorted list1.
+    """
+    paired_lists = list(zip(list1, list2))
+    sorted_pairs = sorted(paired_lists, key=lambda x: x[0])
+    sorted_list1, sorted_list2 = zip(*sorted_pairs)
+    return list(sorted_list1), list(sorted_list2)

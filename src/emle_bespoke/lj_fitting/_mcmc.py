@@ -157,7 +157,11 @@ class MonteCarloSampler:
                 current_state = new_state
                 current_energy = new_energy
 
-            self.configurations.append(current_state)
-            self.energies.append(current_energy)
+            self.configurations.append(
+                current_state.in_units_of(_unit.nanometer)._value
+            )
+            self.energies.append(
+                current_energy.in_units_of(_unit.kilojoules_per_mole)._value
+            )
 
         _logger.info(f"Finished MC sampling of {n_samples} configurations.")
