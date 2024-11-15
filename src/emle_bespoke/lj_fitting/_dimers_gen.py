@@ -1,7 +1,15 @@
 import numpy as _np
 import openmm.unit as _unit
+from openff.interchange import Interchange as _Interchange
+from openff.toolkit import ForceField as _ForceField
+from openff.toolkit import Molecule as _Molecule
+from openff.toolkit import Topology as _Topology
 
-from ..cli._sample_train import create_off_topology
+from ..cli._sample_train import (
+    create_mixed_system,
+    create_off_topology,
+    create_simulation,
+)
 
 """
 1. Generate Initial Dimers
@@ -67,7 +75,7 @@ def get_unique_atoms(topology, res_name="LIG"):
 
     # Get chemical environments for each atom in the topology
     # Creates a dictionary with atom indices as keys and lists of chemical environments as values
-    # Chemical environments are represented as lists of [element_bonded, bond type, bond order]
+    # Chemical environments are represented as lists of [sorted[element 1, element 2], bond type, bond order]
     for chain in topology.chains():
         for residue in chain.residues():
             if residue.name == res_name:
@@ -119,12 +127,25 @@ def generate_water_dimer(pos, mesh_point, water_mapping, orientation="O"):
         Array with positions for atoms in water dimer in nanometers.
     """
     # Constants for TIP3P water model
-    OH_distance = 0.9572  # O-H bond length in Angstroms
-    HOH_angle = 104.52  # H-O-H angle in degrees
-    half_angle = _np.radians(HOH_angle / 2)  # Half angle in radians
+    OH_distance = 0.9572
+    HOH_angle = 104.52
+    half_angle = _np.radians(HOH_angle / 2)
 
     # Set water positions based on orientation
     if orientation == "O":
+        #          y ^
+        #            |
+        #            |             H1
+        #            |          /  |
+        #            |        /    |  (r * sin(θ/2))
+        #            |     /       |
+        #            O ----------------------> x
+        #            |    (r * cos(θ/2))
+        #            |     \       |
+        #            |        \    |  - (r * sin(θ/2))
+        #            |          \  |
+        #            |             H2
+        #
         pos[water_mapping["O"]] = mesh_point
 
         pos[water_mapping["H1"]] = mesh_point + _np.array(
@@ -136,13 +157,25 @@ def generate_water_dimer(pos, mesh_point, water_mapping, orientation="O"):
         )
 
     elif orientation == "H":
+        #          y ^
+        #            |
+        #            |             O
+        #            |          /  |  \
+        #            |        /    |  (r * cos(θ/2))
+        #            |     /       |       \
+        #           H1 ----------------------H2----------------> x
+        #            |        (r * sin(θ/2))
+        #            |
+        #            |
         pos[water_mapping["H1"]] = mesh_point
 
-        pos[water_mapping["H2"]] = mesh_point + _np.array(
-            [OH_distance * _np.cos(half_angle), OH_distance * _np.sin(half_angle), 0]
+        pos[water_mapping["O"]] = mesh_point + _np.array(
+            [OH_distance * _np.sin(half_angle), OH_distance * _np.cos(half_angle), 0]
         )
 
-        pos[water_mapping["O"]] = mesh_point + _np.array([OH_distance, 0, 0])
+        pos[water_mapping["H2"]] = mesh_point + _np.array(
+            [2 * OH_distance * _np.sin(half_angle), 0, 0]
+        )
     else:
         raise ValueError("Invalid orientation. Choose 'O' or 'H'.")
 
@@ -236,7 +269,7 @@ def generate_initial_dimers(pos, atom_id, n_samples=50):
     # Check there are no atoms within 2 Angstroms of the mesh grid points to avoid steric clashes
     # Create mask
     mask = _np.all(
-        _np.linalg.norm(mesh_grid[:, None, :] - pos[:12], axis=2) > 2, axis=1
+        _np.linalg.norm(mesh_grid[:, None, :] - pos[:12], axis=2) > 2.0, axis=1
     )
     mesh_grid = mesh_grid[mask]
 
@@ -250,20 +283,53 @@ def generate_initial_dimers(pos, atom_id, n_samples=50):
     return dimers
 
 
+"""
 topology_off = create_off_topology(
     n_solute=1,
     n_solvent=1,
     solvent_smiles="[H:2][O:1][H:3]",
     solute_smiles="c1ccccc1",
 )
+"""
 
+
+def create_dimer_topology(ligand_smiles, water_smiles):
+    # Convert the SMILES strings to _Molecule objects
+    ligand = _Molecule.from_smiles(ligand_smiles)
+    water = _Molecule.from_mapped_smiles(water_smiles)
+
+    # Assign residue names
+    for atom in ligand.atoms:
+        atom.metadata["residue_name"] = "LIG"
+
+    for atom in water.atoms:
+        atom.metadata["residue_name"] = "HOH"
+
+    # Generate conformers
+    ligand.generate_conformers(n_conformers=1)
+    water.generate_conformers(n_conformers=1)
+
+    # Create the topology
+    topology = _Topology.from_molecules([ligand, water])
+
+    return topology
+
+
+topology_off = create_dimer_topology("c1ccccc1", "[H:2][O:1][H:3]")
 
 # Convert OpenFF Topology to OpenMM Topology and get positions
 topology = topology_off.to_openmm()
 positions_omm = topology_off.get_positions().to_openmm()
 
+for chain in topology.chains():
+    for residue in chain.residues():
+        print(residue.name)
+        for atom in residue.atoms():
+            print(atom.name)
+
 # Get atoms with unique chemical environments in the target molecule
 unique_atoms = get_unique_atoms(topology)
+print(unique_atoms)
 
 # Get atom indices for O, H1, and H2 atoms in a water molecule
 water_mapping = get_water_mapping(topology)
@@ -271,11 +337,65 @@ water_mapping = get_water_mapping(topology)
 # Generate initial dimer configurations for each unique atom
 for atom in unique_atoms:
     positions = positions_omm.value_in_unit(_unit.angstroms)
-    dimers = generate_initial_dimers(positions, atom, n_samples=10)
+    dimers = generate_initial_dimers(positions, atom, n_samples=6)
 
+# Create OpenMM system
 
-import openmm.app as app
+force_field = _ForceField("openff_unconstrained-2.0.0.offxml")
+interchange = _Interchange.from_smirnoff(force_field=force_field, topology=topology_off)
+simulation = create_simulation(interchange, pressure=None)
+system, context, integrator = create_mixed_system("ani2x", list(range(12)), simulation)
 
-for i in range(len(dimers)):
-    with open(f"dimers_{i}.pdb", "w") as f:
+from copy import deepcopy
+
+import openmm as _mm
+
+simulation_mixed = _mm.app.Simulation(topology, system, deepcopy(integrator))
+context = simulation_mixed.context
+context.setPositions(positions_omm)
+
+# simulation_mixed.minimizeEnergy()
+
+from ._mcmc import MonteCarloSampler
+
+mc = MonteCarloSampler()
+sphere_centre = positions_omm[atom]
+
+atom_indices = [water_mapping["O"], water_mapping["H1"], water_mapping["H2"]]
+
+mc.sample(
+    context,
+    n_samples=10000,
+    temperature=298.15,
+    sphere_radius=0.75 * _unit.nanometer,
+    sphere_centre=sphere_centre,
+    atom_indices=atom_indices,
+)
+
+energies = [en._value for en in mc.energies]
+opt_pos = mc.configurations
+
+# Get minium energy dimer
+min_energy_idx = _np.argmin(energies)
+
+# Optimize the dimer with the lowest energy
+context.setPositions(opt_pos[min_energy_idx])
+print(
+    "Energy before minimization:", context.getState(getEnergy=True).getPotentialEnergy()
+)
+# simulation_mixed.minimizeEnergy()
+print(
+    "Energy after minimization:", context.getState(getEnergy=True).getPotentialEnergy()
+)
+
+# Write the optimized dimer to a PDB file
+with open("dimer_optimized.pdb", "w") as f:
+    _mm.app.PDBFile.writeFile(
+        topology, context.getState(getPositions=True).getPositions(), f
+    )
+
+"""
+for i in range(len(opt_pos)):
+    with open(f"pdb_files/dimers_{i}.pdb", "w") as f:
         app.PDBFile.writeFile(topology, dimers[i] * 10, f)
+"""
