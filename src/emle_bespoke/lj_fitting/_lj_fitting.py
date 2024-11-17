@@ -103,7 +103,7 @@ class DimerGenerator:
             )
 
             # Get unique dimers with the lowest energy
-            energies_unique, mask = _unique_with_delta(mc.energies, delta=1.0)
+            energies_unique, mask = _unique_with_delta(mc.energies, delta=0.5)
             configurations_unique = [mc.configurations[i] for i in mask]
             energies_unique, configurations_unique = _sort_two_lists(
                 energies_unique, configurations_unique
@@ -131,7 +131,7 @@ class DimerGenerator:
             )
 
         # Get unique dimers with the lowest energy
-        energies_unique, mask = _unique_with_delta(optimised_energies, delta=1.0)
+        energies_unique, mask = _unique_with_delta(optimised_energies, delta=0.5)
         configurations_unique = [optimised_configurations for i in mask]
         energies_unique, configurations_unique = _sort_two_lists(
             energies_unique, configurations_unique

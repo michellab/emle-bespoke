@@ -114,15 +114,20 @@ def create_simulation(
             timestep * _mm.unit.femtoseconds,
         )
 
-        barostat = _mm.MonteCarloBarostat(
-            pressure * _unit.bar,
-            temperature * _unit.kelvin,
-        )
+        if pressure:
+            barostat = _mm.MonteCarloBarostat(
+                pressure * _unit.bar,
+                temperature * _unit.kelvin,
+            )
+
+            additional_forces = [barostat]
+        else:
+            additional_forces = []
 
         simulation = interchange.to_openmm_simulation(
             combine_nonbonded_forces=True,
             integrator=integrator,
-            additional_forces=[barostat],
+            additional_forces=additional_forces,
         )
 
         simulation.minimizeEnergy()

@@ -51,7 +51,7 @@ def get_unique_atoms(topology, res_name="LIG"):
     return unique_atoms
 
 
-def get_water_mapping(topology, res_name="LIG"):
+def get_water_mapping(topology, res_name="HOH"):
     """
     Get atom indices for O, H1, and H2 atoms in a water molecule.
 
@@ -70,7 +70,7 @@ def get_water_mapping(topology, res_name="LIG"):
     water_mapping = {}
     for chain in topology.chains():
         for residue in chain.residues():
-            if residue.name == "HOH":
+            if residue.name == res_name:
                 for atom in residue.atoms():
                     if "O" in atom.name:
                         water_mapping["O"] = atom.index
