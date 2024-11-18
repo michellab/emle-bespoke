@@ -1,30 +1,8 @@
 """LJ fitting"""
-from typing import List, Union
-
-import numpy as _np
-import openmm as _mm
-import openmm.unit as _unit
-from emle.models import EMLE
-from loguru import logger as _logger
-from openff.interchange import Interchange as _Interchange
-from openff.toolkit import ForceField as _ForceField
-from openmm import LocalEnergyMinimizer as _LocalEnergyMinimizer
-
-from .._constants import HARTREE_TO_KJ_MOL
-from ..cli._sample_train import create_mixed_system as _create_mixed_system
-from ..cli._sample_train import create_simulation as _create_simulation
-from ..cli._sample_train import remove_constraints as _remove_constraints
+from ._dimers_gen import DimerGenerator as _DimerGenerator
 from ._lj_potential import LennardJonesPotential as _LennardJonesPotential
-from ._mcmc import MonteCarloSampler
-from ._utils import get_unique_atoms as _get_unique_atoms
-from ._utils import get_water_mapping as _get_water_mapping
-from ._utils import sort_two_lists as _sort_two_lists
-from ._utils import unique_with_delta as _unique_with_delta
 
-
-
-
-dimer_gen = DimerGenerator()
+dimer_gen = _DimerGenerator()
 energies, config = dimer_gen.generate_dimers(
     solute_smiles="c1ccccc1", solvent_smiles="[H:2][O:1][H:3]"
 )

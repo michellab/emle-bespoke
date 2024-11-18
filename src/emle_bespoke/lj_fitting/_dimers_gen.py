@@ -6,6 +6,7 @@ import openmm.unit as _unit
 from loguru import logger as _logger
 from openff.interchange import Interchange as _Interchange
 from openff.toolkit import ForceField as _ForceField
+from openff.toolkit import Topology as _Topology
 from openmm import LocalEnergyMinimizer as _LocalEnergyMinimizer
 
 from ..cli._sample_train import create_simulation as _create_simulation
@@ -21,10 +22,6 @@ class DimerGenerator:
     def __init__(self):
         self.configurations = []
         self.energies = []
-
-        self._topology = None  # OpenMM Topology
-        self._topology_off = None  # OpenFF Topology
-        self._forcefield = None  # OpenFF ForceField
 
     @staticmethod
     def create_dimer_topology(solute_smiles: str, solvent_smiles: str):
@@ -53,29 +50,26 @@ class DimerGenerator:
 
     def generate_dimers(
         self,
-        solute_smiles: str,
-        solvent_smiles: str,
+        topology_off: _Topology,
         n_samples: int = 2500,
         n_lowest: int = 50,
         temperature: float = 1000.0,
         sphere_radius=0.5 * _unit.nanometer,
         forcefields: Union[str, List[str]] = ["openff_unconstrained-2.0.0.offxml"],
     ):
-        self._topology_off = self.create_dimer_topology(solute_smiles, solvent_smiles)
-
         # Convert OpenFF Topology to OpenMM Topology and get positions
-        self._topology = self._topology_off.to_openmm()
-        positions_omm = self._topology_off.get_positions().to_openmm()
-        qm_region = [atom.index for atom in list(self._topology.chains())[0].atoms()]
+        topology = topology_off.to_openmm()
+        positions_omm = topology_off.get_positions().to_openmm()
+        qm_region = [atom.index for atom in list(topology.chains())[0].atoms()]
 
         # Get atom indices for O, H1, and H2 atoms in a water molecule
-        water_mapping = _get_water_mapping(self._topology)
+        water_mapping = _get_water_mapping(topology)
 
         # Initialize force field and interchange object
         forcefields = forcefields if isinstance(forcefields, list) else [forcefields]
-        self._forcefield = _ForceField(*forcefields)
+        forcefield = _ForceField(*forcefields)
         interchange = _Interchange.from_smirnoff(
-            force_field=self._forcefield, topology=self._topology_off
+            force_field=forcefield, topology=topology_off
         )
 
         # Create simulation instance
@@ -91,7 +85,7 @@ class DimerGenerator:
         mc = MonteCarloSampler()
 
         # Get atoms with unique chemical environments in the target molecule
-        unique_atoms = _get_unique_atoms(self._topology)
+        unique_atoms = _get_unique_atoms(topology)
         atom_indices = [water_mapping["O"], water_mapping["H1"], water_mapping["H2"]]
 
         # Sample dimers
@@ -170,7 +164,6 @@ class DimerGenerator:
         dimer_curve = []
         distances = _np.linspace(0.7, 1.5, 11)
         for dist in distances:
-            print(dist)
             new_pos = ref_positions.copy()
             new_pos[solvent_indices] += (dist - 1.0) * dist_vec
             dimer_curve.append(new_pos)

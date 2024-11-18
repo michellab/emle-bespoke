@@ -1,6 +1,7 @@
-import torch as _torch
 import openmm as _mm
 import openmm.unit as _unit
+import torch as _torch
+
 
 class LennardJonesPotential(_torch.nn.Module):
     """
@@ -30,7 +31,7 @@ class LennardJonesPotential(_torch.nn.Module):
         A dictionary of the parameters to fit.
     _lj_params : dict
         A dictionary of the Lennard-Jones parameters.
-        The keys are the atom types and the values are dictionaries with the "sigma" and "epsilon" parameters.  
+        The keys are the atom types and the values are dictionaries with the "sigma" and "epsilon" parameters.
     _atoms_types : list
         A list of the atom types.
     _sigma : list
@@ -38,11 +39,12 @@ class LennardJonesPotential(_torch.nn.Module):
     _epsilon : list
         A list of the epsilon parameters.
     """
+
     def __init__(self, topology_off, forcefield, parameters_to_fit):
         self._forcefield = forcefield
-        self._topology_off = topology_off
+        topology_off = topology_off
         self._parameters_to_fit = parameters_to_fit
-        
+
         # Initialize the Lennard-Jones parameters
         self._lj_params = {}
         self._atoms_types = []
@@ -55,12 +57,20 @@ class LennardJonesPotential(_torch.nn.Module):
         self._epsilon = [self._lj_params[atom]["epsilon"] for atom in self._atoms_types]
 
     def _get_lennard_jones_parameters(self):
-        ff_params = self._forcefield.label_molecules(self._topology_off)
+        ff_params = self._forcefield.label_molecules(topology_off)
         for mol in ff_params:
             for _, val in mol["vdW"].items():
                 if val.id not in self._lj_params:
-                    sigma = _torch.tensor(val.sigma.to_openmm().in_units_of(_unit.nanometers)._value, dtype=_torch.float64)
-                    epsilon = _torch.tensor(val.epsilon.to_openmm().in_units_of(_unit.kilojoule_per_mole)._value, dtype=_torch.float64)
+                    sigma = _torch.tensor(
+                        val.sigma.to_openmm().in_units_of(_unit.nanometers)._value,
+                        dtype=_torch.float64,
+                    )
+                    epsilon = _torch.tensor(
+                        val.epsilon.to_openmm()
+                        .in_units_of(_unit.kilojoule_per_mole)
+                        ._value,
+                        dtype=_torch.float64,
+                    )
 
                     if val.id in self._parameters_to_fit:
                         if "sigma" in self._parameters_to_fit[val.id]:
@@ -68,17 +78,16 @@ class LennardJonesPotential(_torch.nn.Module):
                         if "epsilon" in self._parameters_to_fit[val.id]:
                             epsilon = _torch.nn.Parameter(epsilon)
 
-                    self._lj_params[val.id] = {
-                        "sigma": sigma,
-                        "epsilon": epsilon
-                    }
-                
+                    self._lj_params[val.id] = {"sigma": sigma, "epsilon": epsilon}
+
                 self._atoms_types.append(val.id)
 
         return self._lj_params, self._atoms_types
-    
+
     @staticmethod
-    def _calculate_lennard_jones_energy(position1, position2, sigma1, sigma2, epsilon1, epsilon2):
+    def _calculate_lennard_jones_energy(
+        position1, position2, sigma1, sigma2, epsilon1, epsilon2
+    ):
         """
         Calculate the Lennard-Jones potential energy between two particles.
 
@@ -108,8 +117,10 @@ class LennardJonesPotential(_torch.nn.Module):
         sigma = 0.5 * (sigma1 + sigma2)
         epsilon = _torch.sqrt(epsilon1 * epsilon2)
 
-        return 4 * epsilon * ((_torch.div(sigma, r)) ** 12 - (_torch.div(sigma, r)) ** 6)
-    
+        return (
+            4 * epsilon * ((_torch.div(sigma, r)) ** 12 - (_torch.div(sigma, r)) ** 6)
+        )
+
     def forward(self, positions, solute_indices, solvent_indices):
         """
         Calculate the Lennard-Jones potential energy for a set of positions.
@@ -129,12 +140,12 @@ class LennardJonesPotential(_torch.nn.Module):
         for i in solvent_indices:
             for j in solute_indices:
                 energy += self._calculate_lennard_jones_energy(
-                    positions[i], 
+                    positions[i],
                     positions[j],
                     self._sigma[i],
                     self._sigma[j],
                     self._epsilon[i],
-                    self._epsilon[j]
+                    self._epsilon[j],
                 )
 
         return energy
