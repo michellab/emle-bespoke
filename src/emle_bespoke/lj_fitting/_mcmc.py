@@ -6,7 +6,7 @@ from loguru import logger as _logger
 
 
 class MonteCarloSampler:
-    def __init__(self, log_frequency=100):
+    def __init__(self, log_frequency=1000):
         self.configurations = []
         self.energies = []
         self._log_frequency = log_frequency
