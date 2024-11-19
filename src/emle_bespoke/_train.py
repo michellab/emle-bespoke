@@ -82,12 +82,12 @@ def train_model(
     loss_class_kwargs = loss_class_kwargs or {}
 
     model = loss_class(emle_model, **loss_class_kwargs)
-    print([name for name, param in model.named_parameters()])
     opt_parameters = [
         param
         for name, param in model.named_parameters()
-        if name.split(".")[1] in opt_param_names
+        if any(opt_param in name.split(".", 1)[1] for opt_param in opt_param_names)
     ]
+    _logger.info(f"Optimizing parameters: {opt_param_names}")
 
     optimizer = _torch.optim.Adam(opt_parameters, lr=lr)
     _train_loop(model, optimizer, epochs, print_every, *args, **kwargs)

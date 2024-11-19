@@ -215,3 +215,28 @@ def remove_constraints(system: _mm.System, atoms: list[int]) -> _mm.System:
             system.removeConstraint(i)
 
     return system
+
+
+def write_dict_to_file(dict_to_write, filename):
+    """
+    Write the trained model to a file.
+
+    Parameters
+    ----------
+
+    emle_model: dict
+        Trained EMLE model.
+
+    model_filename: str
+        Filename to save the trained model.
+    """
+    import scipy.io
+    import torch as _torch
+
+    # Deatch the tensors, convert to numpy arrays and save the model.
+    dict_filtered = {
+        k: v.cpu().detach().numpy() if isinstance(v, _torch.Tensor) else v
+        for k, v in dict_to_write.items()
+        if v is not None
+    }
+    scipy.io.savemat(filename, dict_filtered)

@@ -1,9 +1,11 @@
 """Bespoke model trainer containg various thin wrappers."""
+import numpy as _np
 import torch as _torch
 from emle.models import EMLEBase as _EMLEBase
 from loguru import logger as _logger
 
 from .reference_data import ReferenceData as _ReferenceData
+from .utils import write_dict_to_file as _write_dict_to_file
 
 
 class BespokeModelTrainer:
@@ -465,9 +467,49 @@ class BespokeModelTrainer:
             dtype=self._dtype,
         )
 
+        # Convert reference data to tensors
+        # and place them on the correct device and with the correct dtype
+        atomic_numbers = _torch.tensor(
+            atomic_numbers, device=self._device, dtype=_torch.int64
+        )
+        charges_mm = _torch.tensor(charges_mm, device=self._device, dtype=self._dtype)
+        xyz_qm = _torch.tensor(xyz_qm, device=self._device, dtype=self._dtype)
+        xyz_mm = _torch.tensor(xyz_mm, device=self._device, dtype=self._dtype)
+        solute_mask = _torch.tensor(solute_mask, device=self._device, dtype=_torch.bool)
+        solvent_mask = _torch.tensor(
+            solvent_mask, device=self._device, dtype=_torch.bool
+        )
+        e_int_target = _torch.tensor(
+            e_int_target, device=self._device, dtype=self._dtype
+        )
+
+        e_int_loss = _InteractionEnergyLoss(
+            emle_model=patched_model,
+            lj_potential=lj_potential,
+        )
+
+        # Store the data for plotting
+        plot_data = {
+            "e_int_target": e_int_target.cpu().numpy(),
+        }
+
+        e_int_predicted = []
+        for i in range(len(atomic_numbers)):
+            e_static, e_ind, e_lj = e_int_loss.calculate_predicted_interaction_energy(
+                atomic_numbers=atomic_numbers[i],
+                charges_mm=charges_mm[i],
+                xyz_qm=xyz_qm[i],
+                xyz_mm=xyz_mm[i],
+                solute_mask=solute_mask[i],
+                solvent_mask=solvent_mask[i],
+            )
+            e_int = e_static + e_ind + e_lj
+            e_int_predicted.append(e_int.item())
+        plot_data["e_int_predicted"] = _np.array(e_int_predicted)
+
         # Fit the LJ parameters
         loss_class_kwargs = {"lj_potential": lj_potential}
-        train_model(
+        loss_model = train_model(
             loss_class=_InteractionEnergyLoss,
             opt_param_names=["sigma", "epsilon"],
             lr=lr,
@@ -483,6 +525,33 @@ class BespokeModelTrainer:
             solute_mask=solute_mask,
             solvent_mask=solvent_mask,
         )
+
+        # Store the fitted data for plotting
+        e_int_fitted = []
+        for i in range(len(atomic_numbers)):
+            e_static, e_ind, e_lj = e_int_loss.calculate_predicted_interaction_energy(
+                atomic_numbers=atomic_numbers[i],
+                charges_mm=charges_mm[i],
+                xyz_qm=xyz_qm[i],
+                xyz_mm=xyz_mm[i],
+                solute_mask=solute_mask[i],
+                solvent_mask=solvent_mask[i],
+            )
+            e_int = e_static + e_ind + e_lj
+            e_int_fitted.append(e_int.item())
+        plot_data["e_int_fitted"] = _np.array(e_int_fitted)
+
+        # Write the plot data to a file
+        plot_data_filename = f"{self._filename_prefix}_plot_data.mat"
+        _write_dict_to_file(plot_data, plot_data_filename)
+
+        _logger.info("Fitted LJ parameters:")
+        # Get all Parameters
+        for name, param in loss_model.named_parameters():
+            if "lj" in name:
+                _logger.info(
+                    f"Optimal {name.split('.', 1)[-1][1:]}: {param.item():.8f}"
+                )
 
         _logger.info("Finished fitting LJ parameters.")
 

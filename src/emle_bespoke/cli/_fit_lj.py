@@ -155,6 +155,7 @@ def main():
         xyz_qm=ref_sampler.reference_data["xyz_qm"],
         xyz_mm=ref_sampler.reference_data["xyz_mm"],
         atomic_numbers=ref_sampler.reference_data["z"],
+        charges_mm=ref_sampler.reference_data["charges_mm"],
         e_int_target=ref_sampler.reference_data["e_int"],
         solute_mask=ref_sampler.reference_data["solute_mask"],
         solvent_mask=ref_sampler.reference_data["solvent_mask"],

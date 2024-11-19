@@ -67,15 +67,6 @@ class LennardJonesPotential(_torch.nn.Module):
         )
         self._dtype = dtype or _torch.float64
 
-        # Create sigma and epsilon tensors
-        self._sigma_tensor = _torch.stack(
-            [self._lj_params[atom]["sigma"] for atom in self._atoms_types]
-        ).to(self._device, self._dtype)
-
-        self._epsilon_tensor = _torch.stack(
-            [self._lj_params[atom]["epsilon"] for atom in self._atoms_types]
-        ).to(self._device, self._dtype)
-
     def _get_lennard_jones_parameters(self):
         ff_params = self._forcefield.label_molecules(self._topology_off)
 
@@ -169,13 +160,22 @@ class LennardJonesPotential(_torch.nn.Module):
         torch.Tensor
             The total Lennard-Jones potential energy.
         """
+        # Create the sigma and epsilon tensors with updated parameters
+        sigma_tensor = _torch.stack(
+            [self._lj_params[atom]["sigma"] for atom in self._atoms_types]
+        ).to(self._device, self._dtype)
+
+        epsilon_tensor = _torch.stack(
+            [self._lj_params[atom]["epsilon"] for atom in self._atoms_types]
+        ).to(self._device, self._dtype)
+
         # Get the sigma and epsilon parameters
         xyz_mm = xyz[solvent_mask]
         xyz_qm = xyz[solute_mask]
-        solute_sigma = self._sigma_tensor[solute_mask]
-        solvent_sigma = self._sigma_tensor[solvent_mask]
-        solute_epsilon = self._epsilon_tensor[solute_mask]
-        solvent_epsilon = self._epsilon_tensor[solvent_mask]
+        solute_sigma = sigma_tensor[solute_mask]
+        solvent_sigma = sigma_tensor[solvent_mask]
+        solute_epsilon = epsilon_tensor[solute_mask]
+        solvent_epsilon = epsilon_tensor[solvent_mask]
 
         # Calculate pairwise distances
         distances = _torch.cdist(xyz_mm, xyz_qm)

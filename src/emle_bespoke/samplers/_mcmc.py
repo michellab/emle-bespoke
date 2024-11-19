@@ -125,6 +125,7 @@ class MonteCarloSampler:
         _logger.debug(
             f"{'Step':<10} | {'Current Energy':<15} | {'New Energy':<15} | {'DeltaE':<15}"
         )
+        _logger.debug("-" * 65)
 
         for _ in range(n_samples):
             # Propose a new water positions
@@ -164,4 +165,6 @@ class MonteCarloSampler:
                 current_energy.in_units_of(_unit.kilojoules_per_mole)._value
             )
 
+        _logger.debug("-" * 65)
         _logger.info(f"Finished MC sampling of {n_samples} configurations.")
+        _logger.debug("")

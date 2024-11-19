@@ -56,10 +56,22 @@ class DimerSampler(_BaseSampler):
         )
 
         # Find the minimum distance indices
-        solute_index, solvent_index = _np.unravel_index(
+        solute_index, solvent_index_orig = _np.unravel_index(
             _np.argmin(distances), distances.shape
         )
-        solvent_index = solvent_mask.nonzero()[0][solvent_index]
+        solvent_index = solvent_mask.nonzero()[0][solvent_index_orig]
+
+        min_dist = distances[solute_index, solvent_index_orig]
+        if min_dist > 0.5:
+            _logger.warning(
+                f"Minimum distance between solute and solvent atoms is {min_dist:.2f} nm."
+            )
+            _logger.debug("Discarding dimer curve.")
+            return None
+        else:
+            _logger.debug(
+                f"Minimum distance between solute and solvent atoms is {min_dist:.2f} nm."
+            )
 
         # Displace the solvent molecule along the vector connecting
         # the closest solute and solvent atoms
@@ -69,7 +81,7 @@ class DimerSampler(_BaseSampler):
 
         # Displace the solvent molecule along the vector
         dimer_curve = []
-        distances = _np.linspace(0.7, 1.5, 3)
+        distances = _np.linspace(0.8, 1.3, 6)
         for dist in distances:
             new_pos = ref_positions.copy()
             new_pos[solvent_mask] += (dist - 1.0) * dist_vec
@@ -83,7 +95,7 @@ class DimerSampler(_BaseSampler):
         n_lowest: int,
         temperature: _unit.Quantity,
         sphere_radius: _unit.Quantity,
-        delta=0.5,
+        delta=1.0,
     ):
         from openmm import LocalEnergyMinimizer as _LocalEnergyMinimizer
 
@@ -140,10 +152,16 @@ class DimerSampler(_BaseSampler):
         # Optimize the dimers with the lowest energy
         optimised_energies = []
         optimised_configurations = []
-        for config in configurations_list:
-            _logger.info("Optimizing dimer configuration.")
+        _logger.info(
+            f"Optimizing the {len(configurations_list)} dimers with the lowest energy."
+        )
+        for i, config in enumerate(configurations_list):
+            if i % 10 == 0:
+                _logger.info(
+                    f"Optimizing configuration {i + 1} / {len(configurations_list)}"
+                )
             self._context.setPositions(config)
-            _LocalEnergyMinimizer.minimize(self._context, tolerance=1.0)
+            _LocalEnergyMinimizer.minimize(self._context, tolerance=0.5)
             optimised_configurations.append(
                 self._context.getState(getPositions=True)
                 .getPositions(asNumpy=True)
@@ -160,15 +178,19 @@ class DimerSampler(_BaseSampler):
             energies_unique, configurations_unique
         )
 
+        _logger.info(f"Found {len(energies_unique)} unique dimers.")
+        for i, energy in enumerate(energies_unique):
+            _logger.info(f"Reference dimer {i + 1} has energy {energy:.2f} kJ/mol.")
+
         return energies_unique, configurations_unique
 
     def sample(
         self,
-        n_samples: int = 2500,
+        n_samples: int = 10000,
         n_lowest: int = 50,
         temperature: float = 1000.0,
         sphere_radius=0.5 * _unit.nanometer,
-        delta: float = 0.5,
+        delta: float = 1.0,
     ) -> _ReferenceData:
         energies_dimers, configs_dimers = self.generate_dimers(
             n_samples=n_samples,
@@ -185,10 +207,13 @@ class DimerSampler(_BaseSampler):
         solvent_mask = ~solute_mask
 
         # Generate dimer curves
-        curves = [
-            self.generate_dimer_curve(config, solute_mask, solvent_mask)
-            for config in configs_dimers
-        ]
+        _logger.info("Generating dimer curves.")
+        curves = []
+        for i, config in enumerate(configs_dimers):
+            _logger.debug(f"Generating dimer curve {i + 1} / {len(configs_dimers)}.")
+            curve = self.generate_dimer_curve(config, solute_mask, solvent_mask)
+            if curve is not None:
+                curves.append(curve)
 
         # Calculate the interaction energy for each curve
         symbols_dimer = [_ATOMIC_NUMBERS_TO_SYMBOLS[an] for an in self._atomic_numbers]
@@ -205,7 +230,7 @@ class DimerSampler(_BaseSampler):
                 orca_simple_input="! b3lyp cc-pvtz TightSCF D3BJ",
                 orca_blocks="%MaxCore 1024\n%pal\nnprocs 8\nend\n",
             )
-            _logger.debug("Calculating QM energy of solute.")
+            _logger.debug("Calculating QM energy of solvent.")
             solvent_energy = self._qm_calculator.get_potential_energy(
                 elements=symbols_solvent,
                 positions=curve[0][solvent_mask] * 10.0,
@@ -238,5 +263,8 @@ class DimerSampler(_BaseSampler):
                 self._reference_data.add_data_to_key("solvent_mask", solvent_mask)
                 self._reference_data.add_data_to_key("xyz_qm", config[solute_mask])
                 self._reference_data.add_data_to_key("xyz_mm", config[solvent_mask])
+                self._reference_data.add_data_to_key(
+                    "charges_mm", self._point_charges[solvent_mask]
+                )
 
         return self._reference_data
