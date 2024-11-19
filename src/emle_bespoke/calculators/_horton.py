@@ -3,7 +3,6 @@ from typing import Union
 
 import h5py as _h5py
 import numpy as _np
-import torch as _torch
 from loguru import logger as _logger
 
 from ._base import BaseCalculator
@@ -100,10 +99,10 @@ class HortonCalculator(BaseCalculator):
             q_shift = _np.sum(_np.round(q) - q) / len(q)
 
         return {
-            "s": _torch.tensor(data["valence_widths"]),
-            "q_core": _torch.tensor(data["core_charges"]),
-            "q_val": _torch.tensor(data["valence_charges"] + q_shift),
-            "mu": _torch.tensor(data["cartesian_multipoles"][:, 1:4]),
+            "s": data["valence_widths"],
+            "q_core": data["core_charges"],
+            "q_val": data["valence_charges"] + q_shift,
+            "mu": data["cartesian_multipoles"][:, 1:4],
         }
 
     def _run_horton_wpart(

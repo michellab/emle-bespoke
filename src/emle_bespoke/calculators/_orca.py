@@ -1,7 +1,7 @@
 import os as _os
 from typing import Union
 
-import torch as _torch
+import numpy as _np
 from loguru import logger as _logger
 
 from .._constants import ANGSTROM_TO_BOHR, HARTREE_TO_KJ_MOL
@@ -69,7 +69,7 @@ class ORCACalculator(BaseCalculator):
     #                                                                                              #
     # -------------------------------------------------------------------------------------------- #
     @staticmethod
-    def read_vpot(output_file_name: str, directory: str) -> _torch.Tensor:
+    def read_vpot(output_file_name: str, directory: str) -> _np.ndarray:
         """
         Read the vpot from the ORCA output file.
         """
@@ -79,7 +79,7 @@ class ORCACalculator(BaseCalculator):
             for line in lines:
                 vpot_values.append(float(line.split()[3]))
 
-        return _torch.tensor(vpot_values)
+        return _np.asarray(vpot_values)
 
     @staticmethod
     def read_single_point_energy(output_file_name: str, directory: str) -> float:
@@ -101,7 +101,7 @@ class ORCACalculator(BaseCalculator):
         raise ValueError("Single point energy not found in the output file.")
 
     @staticmethod
-    def read_polarizability(output_file_name: str, directory: str) -> _torch.Tensor:
+    def read_polarizability(output_file_name: str, directory: str) -> _np.ndarray:
         """
         Read the polarizabilities from the ORCA output file.
         """
@@ -124,12 +124,12 @@ class ORCACalculator(BaseCalculator):
         except FileNotFoundError:
             raise FileNotFoundError(f"File '{file_path}' not found.")
 
-        return _torch.tensor(polarizabilities)
+        return _np.asarray(polarizabilities)
 
     @staticmethod
     def write_input_file(
         elements: list[str],
-        positions: _torch.Tensor,
+        positions: _np.ndarray,
         orca_simple_input: str,
         orca_blocks: str,
         charge: int,
@@ -144,7 +144,7 @@ class ORCACalculator(BaseCalculator):
         ----------
         elements: list[str]
             The list of elements.
-        positions: torch.Tensor
+        positions: np.ndarray
             The positions of the atoms.
         orca_simple_input: str
             The simple input for ORCA.
@@ -180,7 +180,7 @@ class ORCACalculator(BaseCalculator):
 
     @staticmethod
     def write_external_potentials(
-        external_potentials: _torch.Tensor,
+        external_potentials: _np.ndarray,
         file_name: str = "pointcharges.pc",
         directory: str = ".",
     ) -> None:
@@ -189,7 +189,7 @@ class ORCACalculator(BaseCalculator):
 
         Parameters
         ----------
-        external_potentials: torch.Tensor
+        external_potentials: np.ndarray
             The external potentials in the format (charge, x, y, z).
         file_name: str
             The name of the file to write.
@@ -202,13 +202,13 @@ class ORCACalculator(BaseCalculator):
                 f.write(f"{charge.item()} {x.item()} {y.item()} {z.item()}\n")
 
     @staticmethod
-    def write_mesh(mesh: _torch.Tensor, file_name: str, directory: str):
+    def write_mesh(mesh: _np.ndarray, file_name: str, directory: str):
         """
         Write the mesh in Bohr to a file.
 
         Parameters
         ----------
-        mesh: torch.Tensor
+        mesh: np.ndarray
             The mesh in Angstrom.
         file_name: str
             The name of the file to write.
@@ -229,10 +229,10 @@ class ORCACalculator(BaseCalculator):
     def get_potential_energy(
         self,
         elements: list[str],
-        positions: _torch.Tensor,
+        positions: _np.ndarray,
         orca_simple_input: str = "! b3lyp cc-pvtz TightSCF NoFrozenCore KeepDens",
         orca_blocks: str = "%pal nprocs 1 end",
-        orca_external_potentials: _torch.Tensor = None,
+        orca_external_potentials: Union[_np.ndarray, None] = None,
         charge: int = 0,
         multiplicity: int = 1,
         input_file_name: Union[str, None] = None,
@@ -246,13 +246,13 @@ class ORCACalculator(BaseCalculator):
         ----------
         elements: list[str]
             The list of elements.
-        positions: torch.Tensor
-            The positions of the atoms.
+        positions: np.ndarray
+            The positions of the atoms in Angstrom.
         orca_simple_input: str
             The simple input for ORCA.
         orca_blocks: str
             The blocks for ORCA.
-        orca_external_potentials: torch.Tensor
+        orca_external_potentials: np.ndarray
             The external potentials in the format (charge, x, y, z).
         charge: int
             The charge of the molecule.
@@ -309,14 +309,14 @@ class ORCACalculator(BaseCalculator):
         return sp_energy
 
     def get_vpot(
-        self, mesh: _torch.Tensor, directory: str, output_file_name: str = "vpot.out"
-    ) -> _torch.Tensor:
+        self, mesh: _np.ndarray, directory: str, output_file_name: str = "vpot.out"
+    ) -> _np.ndarray:
         """
         Get the vpot from ORCA.
 
         Parameters
         ----------
-        mesh: torch.Tensor (N, 3)
+        mesh: _np.ndarray(N, 3)
             The mesh in Angstrom.
         directory: str
             The directory where to write the files.
@@ -325,7 +325,7 @@ class ORCACalculator(BaseCalculator):
 
         Returns
         -------
-        torch.Tensor (N,)
+        _np.ndarray(N,)
             The vpot values in kJ/mol/a.u.
         """
         self.write_mesh(mesh, f"{self._name_prefix}.vpot.xyz", directory)
@@ -366,7 +366,7 @@ class ORCACalculator(BaseCalculator):
 
     def get_polarizability(
         self, directory: str, output_file_name: Union[str, None] = None
-    ) -> _torch.tensor:
+    ) -> _np.ndarray:
         """
         Read the polarizabilities from the ORCA output file.
 
@@ -377,15 +377,13 @@ class ORCACalculator(BaseCalculator):
 
 
 if __name__ == "__main__":
-    import torch
-
     orca = ORCACalculator()
 
     # Define elements
     elements = ["C", "C", "C", "C", "C", "C", "H", "H", "H", "H", "H", "H"]
 
     # Define positions in Angstrom
-    pos = torch.tensor(
+    pos = _np.asarray(
         [
             [17.666, 16.280, 18.146],
             [17.596, 17.503, 18.812],
@@ -405,4 +403,4 @@ if __name__ == "__main__":
     # Vacuum energy
     en = orca.get_potential_energy(elements=elements, positions=pos, directory="vacuum")
 
-    assert torch.isclose(torch.tensor(en), torch.tensor(-232.159529305631), atol=1e-7)
+    assert _np.isclose(en, -232.159529305631, atol=1e-7)
