@@ -7,10 +7,32 @@ from .._constants import ANGSTROM_TO_NANOMETER, HARTREE_TO_KJ_MOL
 from ._lj_potential import LennardJonesPotential as _LennardJonesPotential
 
 
+class WeightedMSELoss(_torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, inputs, targets, weights):
+        assert (
+            inputs.shape == targets.shape
+        ), "Inputs and targets must have the same shape"
+        assert (
+            inputs.shape == weights.shape
+        ), "Inputs and weights must have the same shape"
+        squared_error = (inputs - targets) ** 2
+        weighted_squared_error = squared_error * weights
+        return weighted_squared_error.sum()
+
+
 class InteractionEnergyLoss(_BaseLoss):
     """Loss function for fitting the interaction energy curve to the Lennard-Jones potential."""
 
-    def __init__(self, emle_model, lj_potential, loss=_torch.nn.MSELoss()):
+    def __init__(
+        self,
+        emle_model,
+        lj_potential,
+        loss=WeightedMSELoss(),
+        weighting_method="boltzmann",
+    ):
         super().__init__()
 
         if not isinstance(emle_model, _EMLE):
@@ -27,6 +49,31 @@ class InteractionEnergyLoss(_BaseLoss):
             raise TypeError("loss must be an instance of torch.nn.Module")
 
         self._loss = loss
+
+        self._weighting_method = weighting_method
+
+    @staticmethod
+    def calulate_weights(e_int_target, e_int_predicted, method):
+        if method.lower() == "boltzmann":
+            import openmm.unit as _unit
+
+            temperature = 298.15 * _unit.kelvin
+            kBT = (
+                _unit.BOLTZMANN_CONSTANT_kB
+                * _unit.AVOGADRO_CONSTANT_NA
+                * temperature
+                / _unit.kilojoules_per_mole
+            )
+            weights = _torch.exp(-e_int_target / kBT)
+        elif method.lower() == "uniform":
+            n_samples = len(e_int_target)
+            weights = _torch.ones(
+                n_samples, device=e_int_target.device, dtype=e_int_target.dtype
+            )
+        else:
+            raise ValueError(f"Invalid weighting method: {method}")
+
+        return weights / weights.sum()
 
     def calculate_predicted_interaction_energy(
         self, atomic_numbers, charges_mm, xyz_qm, xyz_mm, solute_mask, solvent_mask
@@ -105,8 +152,12 @@ class InteractionEnergyLoss(_BaseLoss):
         target = e_int_target
         values = e_static + e_ind + e_lj
 
+        weights = self.calulate_weights(e_int_target, values, self._weighting_method)
+
+        print("Weights", weights)
+
         return (
-            self._loss(values, target),
+            self._loss(values, target, weights),
             self._get_rmse(values, target),
             self._get_max_error(values, target),
         )
