@@ -54,9 +54,9 @@ class InteractionEnergyLoss(_BaseLoss):
 
     @staticmethod
     def calulate_weights(e_int_target, e_int_predicted, method):
-        if method.lower() == "boltzmann":
-            import openmm.unit as _unit
+        import openmm.unit as _unit
 
+        if method.lower() == "boltzmann":
             temperature = 298.15 * _unit.kelvin
             kBT = (
                 _unit.BOLTZMANN_CONSTANT_kB
@@ -70,6 +70,15 @@ class InteractionEnergyLoss(_BaseLoss):
             weights = _torch.ones(
                 n_samples, device=e_int_target.device, dtype=e_int_target.dtype
             )
+        elif method.lower() == "non-boltzmann":
+            temperature = 298.15 * _unit.kelvin
+            kBT = (
+                _unit.BOLTZMANN_CONSTANT_kB
+                * _unit.AVOGADRO_CONSTANT_NA
+                * temperature
+                / _unit.kilojoules_per_mole
+            )
+            weights = _torch.exp(-(e_int_target - e_int_predicted) / kBT)
         else:
             raise ValueError(f"Invalid weighting method: {method}")
 
@@ -153,8 +162,6 @@ class InteractionEnergyLoss(_BaseLoss):
         values = e_static + e_ind + e_lj
 
         weights = self.calulate_weights(e_int_target, values, self._weighting_method)
-
-        print("Weights", weights)
 
         return (
             self._loss(values, target, weights),
