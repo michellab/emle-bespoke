@@ -1,7 +1,6 @@
 """Module with samplers of referece data."""
 
-from ._md import MDSampler
 from ._dimers import DimerSampler
+from ._md import MDSampler
 
-
-__all__ = [MDsampler, DimerSampler]
+__all__ = [DimerSampler, MDSampler]

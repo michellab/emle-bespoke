@@ -84,8 +84,14 @@ class LJFitting:
             self.reference_data.add_data_to_key("e_dimer", vacuum_energy)
             self.reference_data.add_data_to_key("e_solute", solute_energy)
             self.reference_data.add_data_to_key("e_solvent", solvent_energy)
-            self._reference_data.add_data_to_key("z", atomic_numbers[solute_indices])
+            self.reference_data.add_data_to_key("z", atomic_numbers[solute_indices])
+            self.reference_data.add_data_to_key("solvent_indices", solvent_indices)
+            self.reference_data.add_data_to_key("solute_indices", solute_indices)
+            self.reference_data.add_data_to_key("xyz", config)
 
+        return self.reference_data
+
+    def get_reference_data(self):
         return self.reference_data
 
 
@@ -109,11 +115,14 @@ energies_dimers, configs_dimers = dimer_gen.generate_dimers(
     forcefields=forcefields,
 )
 
+
+device = _torch.device("cuda") if _torch.cuda.is_available() else _torch.device("cpu")
+dtype = _torch.float64
+
 emle_model = _EMLE(
-    device=_torch.device("cuda")
-    if _torch.cuda.is_available()
-    else _torch.device("cpu"),
-    dtype=_torch.float64,
+    device=device,
+    dtype=dtype,
+    model="/home/joaomorado/repos/emle-bespoke/src/emle_bespoke/models/emle_qm7_new_ivm0.1.mat",
 )
 lj_fitting = LJFitting(
     emle_model=emle_model, qm_calculator=_ORCACalculator(), reference_data=None
@@ -122,7 +131,7 @@ lj_fitting = LJFitting(
 #
 solute_indices = list(range(12))
 solvent_indices = list(range(12, 15))
-atomic_numbers = _torch.tensor([6] * 6 + [1] * 6 + [8, 1, 1])
+atomic_numbers = _torch.tensor([6] * 6 + [1] * 6)
 
 # Calculate the reference interaction energy curve
 curves = []
@@ -131,13 +140,6 @@ for config in configs_dimers:
         dimer_gen.generate_dimer_curve(config, list(range(12)), list(range(12, 15)))
     )
 
-for curve in curves:
-    lj_fitting.get_reference_interaction_energy_curve(
-        dimer_configurations=curve,
-        solute_indices=solute_indices,
-        solvent_indices=solvent_indices,
-        atomic_numbers=atomic_numbers,
-    )
 
 # Fit the Lennard-Jones parameters
 lj_potential = _LennardJonesPotential(
@@ -149,10 +151,29 @@ lj_potential = _LennardJonesPotential(
 lj_fitting_loss = _InteractionEnergyLoss(
     emle_model=emle_model, lj_potential=lj_potential
 )
-lj_fitting_loss.calculate_predicted_interaction_energy(
-    atomic_numbers=atomic_numbers,
-    charges_mm=_torch.tensor([-0.834, 0.417, 0.417]),
-    pos=curves[0][0],
-    solvent_indices=solvent_indices,
-    solute_indices=solute_indices,
-)
+
+curves = _torch.tensor(curves, dtype=dtype, device=device)
+atomic_numbers = _torch.tensor(atomic_numbers, dtype=_torch.int64, device=device)
+
+for pos in curves[0]:
+    e_static, e_ind, e_lj = lj_fitting_loss.calculate_predicted_interaction_energy(
+        atomic_numbers=atomic_numbers,
+        charges_mm=_torch.tensor([-0.834, 0.417, 0.417], dtype=dtype, device=device),
+        pos=pos * 10,
+        solvent_indices=solvent_indices,
+        solute_indices=solute_indices,
+    )
+    final_energy = e_static + e_ind + e_lj
+
+
+for curve in curves:
+    lj_fitting.get_reference_interaction_energy_curve(
+        dimer_configurations=curve,
+        solute_indices=solute_indices,
+        solvent_indices=solvent_indices,
+        atomic_numbers=_torch.tensor([6] * 6 + [1] * 6 + [8, 1, 1], dtype=_torch.int64),
+    )
+
+
+ref_data = lj_fitting.get_reference_data()
+ref_data.write("lj_ref_data.pkl")

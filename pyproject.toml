@@ -42,6 +42,7 @@ repository = "https://github.com/michellab/emle-bespoke"
 
 [project.scripts]
 emle-bespoke = "emle_bespoke.cli._sample_train:main"
+emle-bespoke-lj = "emle_bespoke.cli._fit_lj:main"
 
 [tool.coverage.run]
 source = ['src/emle_bespoke']

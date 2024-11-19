@@ -1,6 +1,8 @@
 import openmm as _mm
 import openmm.unit as _unit
 import torch as _torch
+from openff.toolkit import ForceField as _ForceField
+from openff.toolkit import Topology as _Topology
 
 
 class LennardJonesPotential(_torch.nn.Module):
@@ -20,6 +22,10 @@ class LennardJonesPotential(_torch.nn.Module):
         {
             "n-tip3p-O": ["sigma", "epsilon"],
         }
+    device : torch.device, optional
+        The device to use for the calculation.
+    dtype : torch.dtype, optional
+        The data type to use for the calculation.
 
     Attributes
     ----------
@@ -40,9 +46,12 @@ class LennardJonesPotential(_torch.nn.Module):
         A list of the epsilon parameters.
     """
 
-    def __init__(self, topology_off, forcefield, parameters_to_fit):
-        self._forcefield = forcefield
-        topology_off = topology_off
+    def __init__(
+        self, topology_off, forcefield, parameters_to_fit, device=None, dtype=None
+    ):
+        forcefield = [forcefield] if isinstance(forcefield, str) else forcefield
+        self._forcefield = _ForceField(*forcefield)
+        self._topology_off = topology_off
         self._parameters_to_fit = parameters_to_fit
 
         # Initialize the Lennard-Jones parameters
@@ -56,8 +65,15 @@ class LennardJonesPotential(_torch.nn.Module):
         self._sigma = [self._lj_params[atom]["sigma"] for atom in self._atoms_types]
         self._epsilon = [self._lj_params[atom]["epsilon"] for atom in self._atoms_types]
 
+        self._device = (
+            device or _torch.device("cuda")
+            if _torch.cuda.is_available()
+            else _torch.device("cpu")
+        )
+        self._dtype = dtype or _torch.float64
+
     def _get_lennard_jones_parameters(self):
-        ff_params = self._forcefield.label_molecules(topology_off)
+        ff_params = self._forcefield.label_molecules(self._topology_off)
         for mol in ff_params:
             for _, val in mol["vdW"].items():
                 if val.id not in self._lj_params:
@@ -135,7 +151,7 @@ class LennardJonesPotential(_torch.nn.Module):
         torch.Tensor
             The Lennard-Jones potential energy.
         """
-        energy = _torch.tensor(0.0, dtype=_torch.float64)
+        energy = _torch.tensor(0.0, dtype=self._dtype, device=self._device)
 
         for i in solvent_indices:
             for j in solute_indices:

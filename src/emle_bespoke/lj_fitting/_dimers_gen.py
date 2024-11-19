@@ -11,11 +11,11 @@ from openmm import LocalEnergyMinimizer as _LocalEnergyMinimizer
 
 from ..cli._sample_train import create_simulation as _create_simulation
 from ..cli._sample_train import remove_constraints as _remove_constraints
-from ._mcmc import MonteCarloSampler
-from ._utils import get_unique_atoms as _get_unique_atoms
-from ._utils import get_water_mapping as _get_water_mapping
-from ._utils import sort_two_lists as _sort_two_lists
-from ._utils import unique_with_delta as _unique_with_delta
+from ..samplers._mcmc import MonteCarloSampler
+from ..samplers._utils import get_unique_atoms as _get_unique_atoms
+from ..samplers._utils import get_water_mapping as _get_water_mapping
+from ..samplers._utils import sort_two_lists as _sort_two_lists
+from ..samplers._utils import unique_with_delta as _unique_with_delta
 
 
 class DimerGenerator:

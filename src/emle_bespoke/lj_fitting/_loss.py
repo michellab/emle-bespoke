@@ -31,12 +31,14 @@ class InteractionEnergyLoss(_BaseLoss):
     def calculate_predicted_interaction_energy(
         self, atomic_numbers, charges_mm, pos, solvent_indices, solute_indices
     ):
-        # Calculate EMLE predictions for static and induced components and LJ potential energy
-        e_static, e_ind = self._emle_model(
+        # Calculate EMLE predictions for static and induced components
+        e_static, e_ind = self._emle_model.forward(
             atomic_numbers, charges_mm, pos[solute_indices], pos[solvent_indices]
         )
         e_static = e_static * HARTREE_TO_KJ_MOL
         e_ind = e_ind * HARTREE_TO_KJ_MOL
+
+        # Calculate Lennard-Jones potential energy
         e_lj = self._lj_potential.forward(pos, solute_indices, solvent_indices)
 
         return e_static, e_ind, e_lj
@@ -72,6 +74,7 @@ class InteractionEnergyLoss(_BaseLoss):
         e_static_list = []
         e_ind_list = []
         e_lj = []
+
         for i in range(len(atomic_numbers)):
             e_static, e_ind, e_lj = self.calculate_predicted_interaction_energy(
                 atomic_numbers=atomic_numbers[i],

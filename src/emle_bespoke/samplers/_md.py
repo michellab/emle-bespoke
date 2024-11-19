@@ -1,14 +1,13 @@
 import time
 from typing import Any, Tuple
-import numpy as _np
 
+import numpy as _np
 import openmm as _mm
 import openmm.unit as _unit
 from loguru import logger as _logger
 
 from .._constants import ATOMIC_NUMBERS_TO_SYMBOLS as _ATOMIC_NUMBERS_TO_SYMBOLS
 from ..reference_data import ReferenceData as _ReferenceData
-
 from ._base import BaseSampler as _BaseSampler
 
 
@@ -42,50 +41,27 @@ class MDSampler(_BaseSampler):
         energy_scale=1.0,
         length_scale=1.0,
     ):
-        self._system = system
-        self._context = context
-        self._integrator = integrator
-        self._topology = topology
+        super().__init__(
+            system=system,
+            context=context,
+            integrator=integrator,
+            topology=topology,
+            reference_data=reference_data if reference_data else _ReferenceData(),
+            qm_calculator=qm_calculator,
+            horton_calculator=horton_calculator,
+            energy_scale=energy_scale,
+            length_scale=length_scale,
+        )
+        # Specific to the MD sampler
         self._cutoff = cutoff
         self._atomic_numbers = _np.array(
-            [a.element.atomic_number for a in topology.atoms()],
+            [atom.element.atomic_number for atom in topology.atoms()],
             dtype=_np.int64,
         )
         self._qm_region = _np.array(qm_region, dtype=_np.int64)
-        self._energy_scale = energy_scale
-        self._length_scale = length_scale
-
-        # Calculators
-        self._qm_calculator = qm_calculator
-        self._horton_calculator = horton_calculator
-
-        # Reference data lists
-        self._reference_data = reference_data if reference_data else _ReferenceData()
 
         # Get the point charges
         self._point_charges = self._get_point_charges()
-
-    @property
-    def reference_data(self):
-        return self._reference_data
-
-    def _get_point_charges(self):
-        """
-        Get the point charges from the system.
-
-        Returns
-        -------
-        point_charges: _np.ndarray(NATOMS)
-        """
-        non_bonded_force = [
-            f for f in self._system.getForces() if isinstance(f, _mm.NonbondedForce)
-        ][0]
-        point_charges = _np.zeros(self._topology.getNumAtoms(), dtype=_np.float64)
-        for i in range(non_bonded_force.getNumParticles()):
-            # charge, sigma, epsilon
-            charge, _, _ = non_bonded_force.getParticleParameters(i)
-            point_charges[i] = charge._value
-        return point_charges
 
     def _wrap_positions(
         self, positions: _np.ndarray, boxvectors: _np.ndarray
@@ -148,20 +124,20 @@ class MDSampler(_BaseSampler):
 
     def _distance_to_molecule(
         self,
-        positions: _np.ndarray.Tensor,
-        boxvectors: _np.ndarray.Tensor,
-        molecule_mask: _np.ndarray.Tensor,
-    ) -> _np.ndarray.Tensor:
+        positions: _np.ndarray,
+        boxvectors: _np.ndarray,
+        molecule_mask: _np.ndarray,
+    ) -> _np.ndarray:
         """
         Calculate the R matrix for the molecule.
 
         Parameters
         ----------
-        positions: _np.ndarray.Tensor(NATOMS, 3)
+        positions: _np.ndarray(NATOMS, 3)
             Atomic positions.
-        boxvectors: _np.ndarray.Tensor(3, 3)
+        boxvectors: _np.ndarray(3, 3)
             Box vectors.
-        molecule_mask: _np.ndarray.Tensor(NATOMS)
+        molecule_mask: _np.ndarray(NATOMS)
             Molecule mask.
 
         Returns
@@ -170,7 +146,9 @@ class MDSampler(_BaseSampler):
             Distance matrix.
         """
         R = _np.linalg.norm(
-            positions[molecule_mask][:, None, :] - positions[~molecule_mask][None, :, :], axis=-1
+            positions[molecule_mask][:, None, :]
+            - positions[~molecule_mask][None, :, :],
+            axis=-1,
         )
         return R
 

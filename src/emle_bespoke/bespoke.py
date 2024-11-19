@@ -2,7 +2,6 @@ from emle.models import EMLEBase as _EMLEBase
 from loguru import logger as _logger
 
 from .reference_data import ReferenceData as _ReferenceData
-from .sampler import ReferenceDataSampler as _ReferenceDataSampler
 
 
 class BespokeModelTrainer:
@@ -314,18 +313,10 @@ class BespokeModelTrainer:
         float
             The optimal beta_induced value.
         """
-        import os as _os
-
         import torch as _torch
-        from pkg_resources import resource_filename
 
         from ._train import train_model
         from .patching import EMLEPatched, PatchingLoss
-
-        model = model or resource_filename(
-            "emle_bespoke", "models/emle_qm7_new_ivm0.1.mat"
-        )
-        assert _os.path.isfile(model), f"EMLE model file {model} not found."
 
         msg = r"""
 ╔════════════════════════════════════════════════════════════╗
@@ -368,3 +359,9 @@ class BespokeModelTrainer:
         _logger.info("Finished patching the model.")
 
         return patched_model, alpha_static, beta_induced
+
+    def sample_dimer_curves(self):
+        pass
+
+    def fit_lj(self):
+        pass

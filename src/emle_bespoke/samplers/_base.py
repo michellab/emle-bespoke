@@ -1,38 +1,79 @@
 """Base class for samplers."""
 from abc import ABC, abstractmethod
-import numpy as _np
-from loguru import logger as _logger
 from typing import Any, Tuple, Union
+
+import numpy as _np
+import openmm as _mm
+from loguru import logger as _logger
+
+from ..calculators import HortonCalculator as _HortonCalculator
+from ..calculators import ORCACalculator as _ORCACalculator
 from ..reference_data import ReferenceData as _ReferenceData
-from ..calculators import (
-    HortonCalculator as _HortonCalculator,
-    OrcaCalculator as _OrcaCalculator,
-)
+
 
 class BaseSampler(ABC):
     """Base class for samplers."""
-    def __init__(self, 
-                 reference_data: Union[_ReferenceData, None],
-                 qm_calculator: Union[_OrcaCalculator, None],
-                 horton_calculator: Union[_HortonCalculator, None] = None,
-                 energy_scale: float = 1.0
-                ):
-        
+
+    def __init__(
+        self,
+        system: Union[_mm.System, None] = None,
+        context: Union[_mm.Context, None] = None,
+        integrator: Union[_mm.Integrator, None] = None,
+        topology: Union[_mm.app.Topology, None] = None,
+        reference_data: Union[_ReferenceData, None] = None,
+        qm_calculator: Union[_ORCACalculator, None] = None,
+        horton_calculator: Union[_HortonCalculator, None] = None,
+        energy_scale: float = 1.0,
+        length_scale: float = 1.0,
+    ):
+        # Set the OpenMM objects
+        self._system = system
+        self._context = context
+        self._integrator = integrator
+        self._topology = topology
+
+        # Set the reference data
         self._refence_data = reference_data or _ReferenceData()
+
+        # Set the calculators
         self._qm_calculator = qm_calculator
         self._horton_calculator = horton_calculator
+
+        # Set the energy and length scales
         self._energy_scale = energy_scale
+        self._length_scale = length_scale
 
     @abstractmethod
     def sample(self, *args, **kwargs):
-        raise NotImplementedError("This method must be implemented in the derived sampler class.")
+        raise NotImplementedError(
+            "This method must be implemented in the derived sampler class."
+        )
 
     # ------------------------------------------------------------------------- #
     #                            Concrete methods                               #
-    # ------------------------------------------------------------------------- #    
-    @property   
+    # ------------------------------------------------------------------------- #
+    @property
     def reference_data(self):
         return self._reference_data
+
+    def _get_point_charges(self):
+        """
+        Get the point charges from the system.
+
+        Returns
+        -------
+        point_charges: _np.ndarray(NATOMS)
+        """
+        assert self._system, "The system must be set before getting the point charges."
+        non_bonded_force = [
+            f for f in self._system.getForces() if isinstance(f, _mm.NonbondedForce)
+        ][0]
+        point_charges = _np.zeros(self._topology.getNumAtoms(), dtype=_np.float64)
+        for i in range(non_bonded_force.getNumParticles()):
+            # charge, sigma, epsilon
+            charge, _, _ = non_bonded_force.getParticleParameters(i)
+            point_charges[i] = charge._value
+        return point_charges
 
     def get_static_energy(
         self,
@@ -203,8 +244,15 @@ class BaseSampler(ABC):
             e_ind = None
 
         return e_ind
-    
-    def get_single_point_energy(self, pos: _np.ndarray, symbols: list[str], directory: str, orca_blocks:str, calc_polarizability: bool=False):
+
+    def get_single_point_energy(
+        self,
+        pos: _np.ndarray,
+        symbols: list[str],
+        directory: str,
+        orca_blocks: str,
+        calc_polarizability: bool = False,
+    ):
         """
         Get the single point energy.
 
@@ -220,13 +268,13 @@ class BaseSampler(ABC):
             ORCA blocks.
         calc_polarizability: bool
             Whether to calculate the polarizability.
-        
+
         Returns
         -------
         vacuum_energy: float
             Vacuum energy.
         """
-        
+
         _logger.debug("Running the single point QM energy calculation.")
         vacuum_energy = self._qm_calculator.get_potential_energy(
             elements=symbols,

@@ -2,25 +2,14 @@
 
 # General imports
 import argparse
-import re
-from copy import deepcopy
-from typing import Any, Dict, Optional, Tuple
 
 # OpenMM imports
-import openmm as _mm
-import openmm.app as _app
 import openmm.unit as _unit
 from loguru import logger as _logger
 from openff.interchange import Interchange as _Interchange
-from openff.interchange.components._packmol import UNIT_CUBE as _UNIT_CUBE
-from openff.interchange.components._packmol import pack_box as _pack_box
 
 # OpenFF imports
 from openff.toolkit import ForceField as _ForceField
-from openff.toolkit import Molecule as _Molecule
-from openff.toolkit import Topology as _Topology
-from openff.units import unit as _offunit
-from openmmml import MLPotential as _MLPotential
 
 from .. import log_banner as _log_banner
 
@@ -28,181 +17,11 @@ from .. import log_banner as _log_banner
 from ..bespoke import BespokeModelTrainer as _BespokeModelTrainer
 from ..calculators import HortonCalculator as _HortonCalculator
 from ..calculators import ORCACalculator as _ORCACalculator
-from ..sampler import ReferenceDataSampler as _ReferenceDataSampler
-
-PACKMOL_KWARGS = {
-    "box_shape": _UNIT_CUBE,
-    "target_density": 1.0 * _offunit.gram / _offunit.milliliter,
-}
-
-
-def is_mapped_smiles(smiles: str) -> bool:
-    """Check if the given SMILES string is a mapped SMILES."""
-    pattern = re.compile(r":[0-9]+")
-    return bool(pattern.search(smiles))
-
-
-def create_molecule(smiles: str) -> _Molecule:
-    """Create an OpenFF molecule from a SMILES string."""
-    try:
-        if is_mapped_smiles(smiles):
-            return _Molecule.from_mapped_smiles(smiles)
-        return _Molecule.from_smiles(smiles)
-    except Exception as e:
-        _logger.error(f"Failed to create molecule from SMILES '{smiles}': {e}")
-        raise
-
-
-def create_off_topology(
-    n_solute: int,
-    n_solvent: int,
-    solvent_smiles: str,
-    solute_smiles: str,
-    packmol_kwargs: Optional[Dict[str, Any]] = None,
-) -> _Topology:
-    """Create an OpenFF topology for a system with solute and solvent molecules."""
-    try:
-        _logger.info("Creating OpenFF topology.")
-        _logger.info(f"Number of solute molecules: {n_solute}")
-        _logger.info(f"Number of solvent molecules: {n_solvent}")
-        _logger.info(f"Solute SMILES: {solute_smiles}")
-        _logger.info(f"Solvent SMILES: {solvent_smiles}")
-        for key, value in (packmol_kwargs or PACKMOL_KWARGS).items():
-            _logger.info(f"Packmol kwarg: {key} = {value}")
-
-        solute = create_molecule(solute_smiles)
-        if n_solute > 0:
-            for atom in solute.atoms:
-                atom.metadata["residue_name"] = "LIG"
-
-        if n_solvent == 0 or solvent_smiles is None:
-            return solute.to_topology()
-
-        solvent = create_molecule(solvent_smiles)
-        if solvent_smiles == "[H:2][O:1][H:3]" and n_solvent > 0:
-            for atom in solvent.atoms:
-                atom.metadata["residue_name"] = "HOH"
-
-        return _pack_box(
-            molecules=[solute, solvent],
-            number_of_copies=[n_solute, n_solvent],
-            **(packmol_kwargs or PACKMOL_KWARGS),
-        )
-    except Exception as e:
-        _logger.error(f"Failed to create OpenFF topology: {e}")
-        raise RuntimeError(f"Failed to create OpenFF topology: {e}")
-
-
-def create_simulation(
-    interchange: _Interchange,
-    temperature: float = 298.15,
-    pressure: float = 1.0,
-    timestep: float = 1.0,
-    friction_coefficient: float = 1.0,
-) -> _app.Simulation:
-    """Create an OpenMM simulation from the provided interchange object."""
-    try:
-        _logger.info("Creating OpenMM simulation.")
-        _logger.info(f"Temperature: {temperature} K")
-        _logger.info(f"Pressure: {pressure} bar")
-        _logger.info(f"Timestep: {timestep} fs")
-        _logger.info(f"Friction coefficient: {friction_coefficient} ps^-1")
-
-        integrator = _mm.LangevinIntegrator(
-            temperature * _unit.kelvin,
-            friction_coefficient / _mm.unit.picosecond,
-            timestep * _mm.unit.femtoseconds,
-        )
-
-        if pressure:
-            barostat = _mm.MonteCarloBarostat(
-                pressure * _unit.bar,
-                temperature * _unit.kelvin,
-            )
-
-            additional_forces = [barostat]
-        else:
-            additional_forces = []
-
-        simulation = interchange.to_openmm_simulation(
-            combine_nonbonded_forces=True,
-            integrator=integrator,
-            additional_forces=additional_forces,
-        )
-
-        simulation.minimizeEnergy()
-        simulation.context.setVelocitiesToTemperature(temperature * _unit.kelvin)
-        simulation.context.computeVirtualSites()
-
-        return simulation
-    except Exception as e:
-        _logger.error(f"Failed to create OpenMM simulation: {e}")
-        raise RuntimeError(f"Failed to create OpenMM simulation: {e}")
-
-
-def create_mixed_system(
-    ml_model: str, ml_atoms, simulation: _app.Simulation
-) -> Tuple[_mm.System, _mm.Context, _mm.Integrator]:
-    """
-    Create a mixed system with the provided ML model and simulation object.
-
-    Parameters
-    ----------
-    ml_model : str
-        The machine learning model to use for the solute.
-    ml_atoms : list
-        The indices of the atoms to be treated with the ML model.
-    simulation : _app.Simulation
-        The OpenMM simulation object.
-
-    Returns
-    -------
-    _mm.System, _mm.Context, _mm.Integrator
-        The OpenMM system, context, and integrator instances.
-    """
-    if ml_model:
-        _logger.info(f"Creating mixed system with ML model '{ml_model}'.")
-        potential = _MLPotential(ml_model)
-        integrator = deepcopy(simulation.integrator)
-        system = potential.createMixedSystem(
-            simulation.topology, simulation.system, ml_atoms
-        )
-        context = _mm.Context(system, integrator)
-        context.setPositions(
-            simulation.context.getState(getPositions=True).getPositions()
-        )
-    else:
-        _logger.info("No ML model provided. Using the original MM system.")
-        system = simulation.system
-        context = simulation.context
-        integrator = simulation.integrator
-
-    return system, context, integrator
-
-
-def remove_constraints(system: _mm.System, atoms: list[int]) -> _mm.System:
-    """
-    Remove constraints involving chosen atoms from the system.
-
-    Parameters
-    ----------
-    system : openmm.System
-        The OpenMM system.
-    atoms : list of int
-        The list of atoms to remove constraints from.
-
-    Returns
-    -------
-    openmm.System
-        The modified OpenMM system.
-    """
-    # Remove constraints involving chosen atoms
-    for i in range(system.getNumConstraints() - 1, -1, -1):
-        p1, p2, _ = system.getConstraintParameters(i)
-        if p1 in atoms or p2 in atoms:
-            system.removeConstraint(i)
-
-    return system
+from ..samplers._md import ReferenceDataSampler as _ReferenceDataSampler
+from ..utils import create_mixed_system as _create_mixed_system
+from ..utils import create_simulation as _create_simulation
+from ..utils import create_simulation_box_topology as _create_simulation_box_topology
+from ..utils import remove_constraints as _remove_constraints
 
 
 def main():
@@ -315,7 +134,7 @@ def main():
     _logger.info("══════════════════════════════════════════════════════════════\n")
 
     # Create topology
-    topology_off = create_off_topology(
+    topology_off = _create_simulation_box_topology(
         n_solute=args.n_solute,
         n_solvent=args.n_solvent,
         solvent_smiles=args.solvent,
@@ -329,7 +148,7 @@ def main():
     )
 
     # Create simulation object
-    simulation = create_simulation(
+    simulation = _create_simulation(
         interchange=interchange,
         temperature=args.temperature,
         pressure=args.pressure,
@@ -342,11 +161,11 @@ def main():
     qm_region = [atom.index for atom in list(topology.chains())[0].atoms()]
 
     # Remove constraints involving alchemical atoms
-    remove_constraints(simulation.system, qm_region)
+    _remove_constraints(simulation.system, qm_region)
     simulation.context.reinitialize(preserveState=True)
 
     # Create mixed system
-    system, context, integrator = create_mixed_system(
+    system, context, integrator = _create_mixed_system(
         args.ml_model, qm_region, simulation
     )
 
