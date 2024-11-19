@@ -1,3 +1,5 @@
+"""Bespoke model trainer containg various thin wrappers."""
+import torch as _torch
 from emle.models import EMLEBase as _EMLEBase
 from loguru import logger as _logger
 
@@ -26,6 +28,12 @@ class BespokeModelTrainer:
         reference_data=None,
         emle_base: _EMLEBase = _EMLEBase,
         filename_prefix: str = "bespoke",
+        alpha_static: float = 1.0,
+        beta_induced: float = 1.0,
+        dtype=_torch.float64,
+        device=_torch.device("cuda")
+        if _torch.cuda.is_available()
+        else _torch.device("cpu"),
     ):
         self.reference_sampler = reference_sampler
         self.reference_data = (
@@ -45,6 +53,14 @@ class BespokeModelTrainer:
 
         self._emle_base = emle_base
         self._filename_prefix = filename_prefix
+
+        # Set the alpha and beta values
+        self._alpha_static = alpha_static
+        self._beta_induced = beta_induced
+
+        # Set the device and dtype
+        self._device = device
+        self._dtype = dtype
 
     def sample_and_train_model(
         self,
@@ -151,6 +167,8 @@ class BespokeModelTrainer:
             Whether to calculate Horton properties. Default is True.
         calc_polarizability : bool, optional
             Whether to get polarizability. Default is True.
+        ref_data_filename : str, optional
+            The filename to save the reference data to. Default is None.
 
         Returns
         -------
@@ -180,6 +198,7 @@ class BespokeModelTrainer:
         _logger.info("Finished sampling reference data.")
 
         # Write the reference data to a file
+        ref_data_filename = ref_data_filename or f"{self._filename_prefix}_ref_data.pkl"
         self.reference_sampler.reference_data.write(filename=ref_data_filename)
 
         return self.reference_sampler.reference_data
@@ -271,8 +290,8 @@ class BespokeModelTrainer:
         lr=0.01,
         epochs=500,
         print_every=10,
-        alpha_static=1.0,
-        beta_induced=1.0,
+        alpha_static=None,
+        beta_induced=None,
     ):
         """
         Patch the model by finding optimal alpha and beta values.
@@ -326,11 +345,21 @@ class BespokeModelTrainer:
         for line in msg.split("\n"):
             _logger.info(line)
 
+        self._alpha_static = (
+            alpha_static if alpha_static is not None else self._alpha_static
+        )
+        self._beta_induced = (
+            beta_induced if beta_induced is not None else self._beta_induced
+        )
+
+        _logger.info(f"Initial alpha_static: {alpha_static}")
+        _logger.info(f"Initial beta_induced: {beta_induced}")
+
         # Create the patched model
         patched_model = EMLEPatched(
             model=model,
-            alpha_static=alpha_static,
-            beta_induced=beta_induced,
+            alpha_static=self._alpha_static,
+            beta_induced=self._beta_induced,
             device=xyz_mm[0].device,
             dtype=xyz_mm[0].dtype,
         )
@@ -351,8 +380,8 @@ class BespokeModelTrainer:
             xyz_mm=xyz_mm,
         )
 
-        alpha_static = patched_model.alpha_static.item()
-        beta_induced = patched_model.beta_induced.item()
+        self._alpha_static = patched_model.alpha_static.item()
+        self._beta_induced = patched_model.beta_induced.item()
 
         _logger.info(f"Optimal alpha_static: {alpha_static}")
         _logger.info(f"Optimal beta_induced: {beta_induced}")
@@ -360,8 +389,101 @@ class BespokeModelTrainer:
 
         return patched_model, alpha_static, beta_induced
 
-    def sample_dimer_curves(self):
-        pass
+    def sample_dimer_curves(
+        self, ref_data_filename=None, *args, **kwargs
+    ) -> _ReferenceData:
+        """
+        Sample reference data.
 
-    def fit_lj(self):
-        pass
+        Parameters
+        ----------
+        n_samples : int
+            The number of samples to generate.
+        n_steps : int
+            The number of steps between each sample.
+        ref_data_filename : str
+            The filename to save the reference data.
+
+        Returns
+        -------
+        dict
+            The reference data.
+        """
+        assert self.reference_sampler is not None, "Reference sampler is not set."
+        msg = r"""
+╔════════════════════════════════════════════════════════════╗
+║             Starting sampling of dimer curves...           ║
+╚════════════════════════════════════════════════════════════╝
+"""
+        for line in msg.split("\n"):
+            _logger.info(line)
+
+        self.reference_sampler.sample()
+
+        _logger.info("Finished sampling of dimer curves.")
+
+        # Write the reference data to a file
+        ref_data_filename = ref_data_filename or f"{self._filename_prefix}_ref_data.pkl"
+        self.reference_sampler.reference_data.write(filename=ref_data_filename)
+
+        return self.reference_sampler.reference_data
+
+    def fit_lj(
+        self,
+        e_int_target,
+        atomic_numbers,
+        charges_mm,
+        xyz_qm,
+        xyz_mm,
+        solute_mask,
+        solvent_mask,
+        lj_potential,
+        model=None,
+        lr=0.01,
+        epochs=500,
+        print_every=10,
+    ):
+        from ._train import train_model
+        from .lj_fitting import InteractionEnergyLoss as _InteractionEnergyLoss
+        from .patching import EMLEPatched
+
+        msg = r"""
+╔════════════════════════════════════════════════════════════╗
+║            Starting fitting of LJ parameters...            ║
+╚════════════════════════════════════════════════════════════╝
+"""
+        for line in msg.split("\n"):
+            _logger.info(line)
+
+        # Create an EMLE patched model to allow for LJ fitting
+        # with custom alpha and beta values
+        patched_model = EMLEPatched(
+            model=model,
+            alpha_static=self._alpha_static,
+            beta_induced=self._beta_induced,
+            device=self._device,
+            dtype=self._dtype,
+        )
+
+        # Fit the LJ parameters
+        loss_class_kwargs = {"lj_potential": lj_potential}
+        train_model(
+            loss_class=_InteractionEnergyLoss,
+            opt_param_names=["sigma", "epsilon"],
+            lr=lr,
+            epochs=epochs,
+            print_every=print_every,
+            emle_model=patched_model,
+            loss_class_kwargs=loss_class_kwargs,
+            e_int_target=e_int_target,
+            atomic_numbers=atomic_numbers,
+            charges_mm=charges_mm,
+            xyz_qm=xyz_qm,
+            xyz_mm=xyz_mm,
+            solute_mask=solute_mask,
+            solvent_mask=solvent_mask,
+        )
+
+        _logger.info("Finished fitting LJ parameters.")
+
+        return

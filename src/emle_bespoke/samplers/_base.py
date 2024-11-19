@@ -33,7 +33,7 @@ class BaseSampler(ABC):
         self._topology = topology
 
         # Set the reference data
-        self._refence_data = reference_data or _ReferenceData()
+        self._reference_data = reference_data or _ReferenceData()
 
         # Set the calculators
         self._qm_calculator = qm_calculator

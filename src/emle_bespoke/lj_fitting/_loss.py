@@ -29,17 +29,21 @@ class InteractionEnergyLoss(_BaseLoss):
         self._loss = loss
 
     def calculate_predicted_interaction_energy(
-        self, atomic_numbers, charges_mm, pos, solvent_indices, solute_indices
+        self, atomic_numbers, charges_mm, xyz_qm, xyz_mm, solute_mask, solvent_mask
     ):
         # Calculate EMLE predictions for static and induced components
         e_static, e_ind = self._emle_model.forward(
-            atomic_numbers, charges_mm, pos[solute_indices], pos[solvent_indices]
+            atomic_numbers, charges_mm, xyz_qm, xyz_mm
         )
         e_static = e_static * HARTREE_TO_KJ_MOL
         e_ind = e_ind * HARTREE_TO_KJ_MOL
 
         # Calculate Lennard-Jones potential energy
-        e_lj = self._lj_potential.forward(pos, solute_indices, solvent_indices)
+        e_lj = self._lj_potential.forward(
+            _torch.cat([xyz_qm, xyz_mm], dim=0),
+            solute_mask=solute_mask,
+            solvent_mask=solvent_mask,
+        )
 
         return e_static, e_ind, e_lj
 
@@ -48,9 +52,10 @@ class InteractionEnergyLoss(_BaseLoss):
         e_int_target,
         atomic_numbers,
         charges_mm,
-        pos,
-        solvent_indices,
-        solute_indices,
+        xyz_qm,
+        xyz_mm,
+        solute_mask,
+        solvent_mask,
     ):
         """
         Forward pass.
@@ -63,12 +68,14 @@ class InteractionEnergyLoss(_BaseLoss):
             Atomic numbers of QM atoms.
         charges_mm: torch.Tensor (NBATCH, max_mm_atoms)
             MM point charges in atomic units.
-        pos: torch.Tensor (NBATCH, max_atoms, 3)
-            Cartesian coordinates in nm.
-        solvent_indices: torch.Tensor (NBATCH, N_MM_ATOMS)
-            Indices of solvent atoms.
-        solute_indices: torch.Tensor (NBATCH, N_QM_ATOMS)
-            Indices of solute atoms.
+        xyz_qm: torch.Tensor (NBATCH, N_QM_ATOMS, 3)
+            QM atom positions in Angstrom.
+        xyz_mm: torch.Tensor (NBATCH, N_MM_ATOMS, 3)
+            MM atom positions in Angstrom.
+        solute_mask: torch.Tensor (N_MM_ATOMS,)
+            Mask for the solute atoms.
+        solvent_mask: torch.Tensor (N_MM_ATOMS,)
+            Mask for the solvent atoms.
         """
         # Calculate EMLE predictions for static and induced components
         e_static_list = []
@@ -79,9 +86,10 @@ class InteractionEnergyLoss(_BaseLoss):
             e_static, e_ind, e_lj = self.calculate_predicted_interaction_energy(
                 atomic_numbers=atomic_numbers[i],
                 charges_mm=charges_mm[i],
-                pos=pos[i],
-                solvent_indices=solvent_indices,
-                solute_indices=solute_indices,
+                xyz_qm=xyz_qm[i],
+                xyz_mm=xyz_mm[i],
+                solute_mask=solute_mask,
+                solvent_mask=solvent_mask,
             )
             e_static_list.append(e_static)
             e_ind_list.append(e_ind)
@@ -89,7 +97,7 @@ class InteractionEnergyLoss(_BaseLoss):
 
         e_static = _torch.stack(e_static_list) * HARTREE_TO_KJ_MOL
         e_ind = _torch.stack(e_ind_list) * HARTREE_TO_KJ_MOL
-        e_lj = self._lj_potential.forward(pos, solute_indices, solvent_indices)
+        e_lj = _torch.stack(e_lj)
 
         target = e_int_target
         values = e_static + e_ind + e_lj

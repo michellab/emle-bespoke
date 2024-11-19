@@ -9,6 +9,7 @@ def train_model(
     epochs,
     emle_model,
     print_every=10,
+    loss_class_kwargs=None,
     *args,
     **kwargs,
 ):
@@ -29,6 +30,8 @@ def train_model(
         EMLE model instance.
     print_every: int
         How often to print training progress
+    loss_class_kwargs: dict
+            Keyword arguments to pass to the loss class besides the EMLE model.
 
     Returns
     -------
@@ -75,7 +78,11 @@ def train_model(
 
         return loss
 
-    model = loss_class(emle_model)
+    # Additonal kwargs for the loss class
+    loss_class_kwargs = loss_class_kwargs or {}
+
+    model = loss_class(emle_model, **loss_class_kwargs)
+    print([name for name, param in model.named_parameters()])
     opt_parameters = [
         param
         for name, param in model.named_parameters()

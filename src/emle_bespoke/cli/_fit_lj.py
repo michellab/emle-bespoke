@@ -16,13 +16,12 @@ from .._log import log_banner as _log_banner
 # Imports from the emle-bespoke package
 from ..bespoke import BespokeModelTrainer as _BespokeModelTrainer
 from ..calculators import ORCACalculator as _ORCACalculator
+from ..lj_fitting import LennardJonesPotential as _LennardJonesPotential
 from ..samplers._dimers import DimerSampler as _DimerSampler
-from ..utils import (
-    create_mixed_system as _create_mixed_system,
-    create_dimer_topology as _create_dimer_topology,
-    create_simulation as _create_simulation,
-    remove_constraints as _remove_constraints,
-)
+from ..utils import create_dimer_topology as _create_dimer_topology
+from ..utils import create_mixed_system as _create_mixed_system
+from ..utils import create_simulation as _create_simulation
+from ..utils import remove_constraints as _remove_constraints
 
 
 def main():
@@ -31,16 +30,10 @@ def main():
     )
 
     parser.add_argument(
-        "--n_samples", 
-        type=int, 
-        default=100, 
-        help="Number of samples to generate."
+        "--n_samples", type=int, default=100, help="Number of samples to generate."
     )
     parser.add_argument(
-        "--n_steps", 
-        type=int, 
-        default=1000, 
-        help="Number of simulation steps to run."
+        "--n_steps", type=int, default=1000, help="Number of simulation steps to run."
     )
 
     parser.add_argument(
@@ -51,10 +44,7 @@ def main():
     )
 
     parser.add_argument(
-        "--solute", 
-        type=str, 
-        default="c1ccccc1",
-        help="The ligand SMILES string."
+        "--solute", type=str, default="c1ccccc1", help="The ligand SMILES string."
     )
     parser.add_argument(
         "--solvent",
@@ -148,17 +138,31 @@ def main():
         qm_calculator=_ORCACalculator(),
     )
 
-    ref_sampler.sample()
-    
-    """
+    # Create the Lennard-Jones potential
+    lj_potential = _LennardJonesPotential(
+        topology_off=topology_off,
+        forcefield=force_field,
+        parameters_to_fit={"n-tip3p-O": ["sigma", "epsilon"]},
+    )
+
+    # Fit the Lennard-Jones potential
     emle_bespoke = _BespokeModelTrainer(
         ref_sampler, filename_prefix=args.filename_prefix
     )
-    emle_bespoke.sample_and_fit(n_samples=args.n_samples, n_steps=args.n_steps)
-    """
+    emle_bespoke.sample_dimer_curves()
+    emle_bespoke.fit_lj(
+        lj_potential=lj_potential,
+        xyz_qm=ref_sampler.reference_data["xyz_qm"],
+        xyz_mm=ref_sampler.reference_data["xyz_mm"],
+        atomic_numbers=ref_sampler.reference_data["z"],
+        e_int_target=ref_sampler.reference_data["e_int"],
+        solute_mask=ref_sampler.reference_data["solute_mask"],
+        solvent_mask=ref_sampler.reference_data["solvent_mask"],
+    )
+
     msg = r"""
 ╔════════════════════════════════════════════════════════════╗
-║              emle-bespoke terminated normally!             ║
+║             emle-bespoke-lj terminated normally!           ║
 ╚════════════════════════════════════════════════════════════╝"""
     for line in msg.split("\n"):
         _logger.info(line)
