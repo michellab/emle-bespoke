@@ -112,13 +112,13 @@ class MDSampler(_BaseSampler):
             Centered atomic positions.
         """
         mol_positions = positions[molecule_mask]
-        com = mol_positions.mean(dim=0)
+        com = mol_positions.mean(axis=0)
         box_center = 0.5 * boxvectors.diagonal()
         translation_vector = box_center - com
         positions += translation_vector
 
         # Wrap the positions to the main box
-        self._wrap_positions(positions, boxvectors)
+        positions = self._wrap_positions(positions, boxvectors)
 
         return positions
 
