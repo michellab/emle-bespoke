@@ -243,7 +243,7 @@ class MDSampler(_BaseSampler):
         charges_mm = self._point_charges[~molecule_mask][R_cutoff]
 
         # Get the reference data
-        e_static, polarizability, horton_data, e_ind = self.get_reference_data(
+        _, e_static, polarizability, horton_data, e_ind = self.get_reference_data(
             pos_qm=pos_qm,
             symbols_qm=symbols_qm,
             pos_mm=pos_mm,

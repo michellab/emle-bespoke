@@ -170,7 +170,7 @@ class ORCACalculator(BaseCalculator):
             f"{orca_simple_input}\n{orca_blocks}\n* xyz {charge} {multiplicity}\n"
         )
         for element, position in zip(elements, positions):
-            input_file += f"{element} {position[0].item()} {position[1].item()} {position[2].item()}\n"
+            input_file += f"{element} {position[0]} {position[1]} {position[2]}\n"
         input_file += "*"
 
         with open(_os.path.join(directory, input_file_name), "w") as f:
@@ -197,9 +197,9 @@ class ORCACalculator(BaseCalculator):
             The directory where to write
         """
         with open(_os.path.join(directory, file_name), "w") as f:
-            f.write(f"{external_potentials.size(0)}\n")
+            f.write(f"{external_potentials.shape[0]}\n")
             for charge, x, y, z in external_potentials:
-                f.write(f"{charge.item()} {x.item()} {y.item()} {z.item()}\n")
+                f.write(f"{charge} {x} {y} {z}\n")
 
     @staticmethod
     def write_mesh(mesh: _np.ndarray, file_name: str, directory: str):
@@ -217,9 +217,9 @@ class ORCACalculator(BaseCalculator):
         """
         mesh_in_bohr = mesh * ANGSTROM_TO_BOHR
         with open(_os.path.join(directory, file_name), "w") as f:
-            f.write(f"{mesh.size(0)}\n")
+            f.write(f"{mesh.shape[0]}\n")
             for x, y, z in mesh_in_bohr:
-                f.write(f"{x.item()} {y.item()} {z.item()}\n")
+                f.write(f"{x} {y} {z}\n")
 
     # -------------------------------------------------------------------------------------------- #
     #                                                                                              #
