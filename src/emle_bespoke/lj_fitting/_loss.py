@@ -57,7 +57,7 @@ class InteractionEnergyLoss(_BaseLoss):
         import openmm.unit as _unit
 
         if method.lower() == "boltzmann":
-            temperature = 298.15 * _unit.kelvin
+            temperature = 500.0 * _unit.kelvin
             kBT = (
                 _unit.BOLTZMANN_CONSTANT_kB
                 * _unit.AVOGADRO_CONSTANT_NA
@@ -71,7 +71,7 @@ class InteractionEnergyLoss(_BaseLoss):
                 n_samples, device=e_int_target.device, dtype=e_int_target.dtype
             )
         elif method.lower() == "non-boltzmann":
-            temperature = 298.15 * _unit.kelvin
+            temperature = 500.0 * _unit.kelvin
             kBT = (
                 _unit.BOLTZMANN_CONSTANT_kB
                 * _unit.AVOGADRO_CONSTANT_NA
@@ -115,6 +115,7 @@ class InteractionEnergyLoss(_BaseLoss):
         xyz_mm,
         solute_mask,
         solvent_mask,
+        l2_reg=10.0,
     ):
         """
         Forward pass.
@@ -135,6 +136,8 @@ class InteractionEnergyLoss(_BaseLoss):
             Mask for the solute atoms.
         solvent_mask: torch.Tensor (N_MM_ATOMS,)
             Mask for the solvent atoms.
+        l2_reg: float or None
+            L2 regularization strength. If None, no regularization is applied.
         """
         # Calculate EMLE predictions for static and induced components
         e_static_list = []
@@ -161,10 +164,30 @@ class InteractionEnergyLoss(_BaseLoss):
         target = e_int_target
         values = e_static + e_ind + e_lj
 
-        weights = self.calulate_weights(e_int_target, values, self._weighting_method)
+        if isinstance(self._loss, WeightedMSELoss):
+            weights = self.calulate_weights(
+                e_int_target, values, self._weighting_method
+            )
+            loss = self._loss(values, target, weights)
+        elif isinstance(self._loss, _torch.nn.MSELoss):
+            loss = self._loss(values, target)
+        else:
+            raise NotImplementedError(f"Loss function {self._loss} not implemented")
+
+        if l2_reg is not None:
+            epsilon_diff = (
+                self._lj_potential._epsilon_tensor
+                - self._lj_potential._epsilon_tensor_initial
+            )
+            sigma_diff = (
+                self._lj_potential._sigma_tensor
+                - self._lj_potential._sigma_tensor_initial
+            )
+            reg = l2_reg * (epsilon_diff.square().sum() + sigma_diff.square().sum())
+            loss += reg
 
         return (
-            self._loss(values, target, weights),
+            loss,
             self._get_rmse(values, target),
             self._get_max_error(values, target),
         )

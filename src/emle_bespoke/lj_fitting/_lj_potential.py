@@ -1,6 +1,7 @@
 """Lennard-Jones potential class."""
 import openmm.unit as _unit
 import torch as _torch
+from loguru import logger as _logger
 
 
 class LennardJonesPotential(_torch.nn.Module):
@@ -67,7 +68,18 @@ class LennardJonesPotential(_torch.nn.Module):
         )
         self._dtype = dtype or _torch.float64
 
+        # Create the initial sigma and epsilon tensors
+        # This is need if regularization is used
+        self._sigma_tensor_initial = _torch.stack(
+            [self._lj_params[atom]["sigma"] for atom in self._atoms_types]
+        ).to(self._device, self._dtype)
+
+        self._epsilon_tensor_initial = _torch.stack(
+            [self._lj_params[atom]["epsilon"] for atom in self._atoms_types]
+        ).to(self._device, self._dtype)
+
     def _get_lennard_jones_parameters(self):
+        _logger.debug("Getting Lennard-Jones parameters.")
         ff_params = self._forcefield.label_molecules(self._topology_off)
 
         # Use nn.ParameterDict for dynamic registration
@@ -82,11 +94,14 @@ class LennardJonesPotential(_torch.nn.Module):
                         val.sigma.to_openmm().in_units_of(_unit.nanometers)._value,
                         dtype=_torch.float64,
                     )
-                    epsilon = _torch.tensor(
-                        val.epsilon.to_openmm()
-                        .in_units_of(_unit.kilojoule_per_mole)
-                        ._value,
-                        dtype=_torch.float64,
+                    epsilon = (
+                        _torch.tensor(
+                            val.epsilon.to_openmm()
+                            .in_units_of(_unit.kilojoule_per_mole)
+                            ._value,
+                            dtype=_torch.float64,
+                        )
+                        + 1e-16
                     )
 
                     # Dynamically register trainable parameters
@@ -103,7 +118,23 @@ class LennardJonesPotential(_torch.nn.Module):
 
                 self._atoms_types.append(val.id)
 
+        # Pretty print the Lennard-Jones parameters
+        self.print_lj_parameters()
+
         return self._lj_params, self._atoms_types
+
+    def print_lj_parameters(self):
+        """Print the Lennard-Jones parameters."""
+        _logger.debug("")
+        _logger.debug("Lennard-Jones Parameters")
+        _logger.debug("-" * 40)
+        _logger.debug(f"{'Atom Type':16s} | {'σ':>8s} | {'ε':>8s}")
+        _logger.debug("-" * 40)
+        for atom in self._lj_params:
+            sigma = self._lj_params[atom]["sigma"].item()
+            epsilon = self._lj_params[atom]["epsilon"].item()
+            _logger.debug(f"{atom:16s} | {sigma:8.4f} | {epsilon:8.4f}")
+        _logger.debug("-" * 40)
 
     @staticmethod
     def _calculate_lennard_jones_energy(
@@ -161,17 +192,20 @@ class LennardJonesPotential(_torch.nn.Module):
             The total Lennard-Jones potential energy.
         """
         # Create the sigma and epsilon tensors with updated parameters
-        sigma_tensor = _torch.stack(
+        self._sigma_tensor = _torch.stack(
             [self._lj_params[atom]["sigma"] for atom in self._atoms_types]
         ).to(self._device, self._dtype)
 
-        epsilon_tensor = _torch.stack(
+        self._epsilon_tensor = _torch.stack(
             [self._lj_params[atom]["epsilon"] for atom in self._atoms_types]
         ).to(self._device, self._dtype)
 
+        sigma_tensor = _torch.abs(self._sigma_tensor)
+        epsilon_tensor = _torch.abs(self._epsilon_tensor)
+
         # Get the sigma and epsilon parameters
-        xyz_mm = xyz[solvent_mask]
         xyz_qm = xyz[solute_mask]
+        xyz_mm = xyz[solvent_mask]
         solute_sigma = sigma_tensor[solute_mask]
         solvent_sigma = sigma_tensor[solvent_mask]
         solute_epsilon = epsilon_tensor[solute_mask]
