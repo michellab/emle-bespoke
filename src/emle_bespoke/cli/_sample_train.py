@@ -11,13 +11,13 @@ from openff.interchange import Interchange as _Interchange
 # OpenFF imports
 from openff.toolkit import ForceField as _ForceField
 
-from .. import log_banner as _log_banner
+from .._log import log_banner as _log_banner
 
 # Imports from the emle-bespoke package
 from ..bespoke import BespokeModelTrainer as _BespokeModelTrainer
 from ..calculators import HortonCalculator as _HortonCalculator
 from ..calculators import ORCACalculator as _ORCACalculator
-from ..samplers._md import ReferenceDataSampler as _ReferenceDataSampler
+from ..samplers._md import MDSampler as _MDSampler
 from ..utils import create_mixed_system as _create_mixed_system
 from ..utils import create_simulation as _create_simulation
 from ..utils import create_simulation_box_topology as _create_simulation_box_topology
@@ -174,7 +174,7 @@ def main():
         context.setVelocitiesToTemperature(args.temperature * _unit.kelvin)
         integrator.step(args.n_equilibration)
 
-    ref_sampler = _ReferenceDataSampler(
+    ref_sampler = _MDSampler(
         system=system,
         context=context,
         integrator=integrator,
