@@ -192,6 +192,79 @@ def create_mixed_system(
     return system, context, integrator
 
 
+def add_emle_force(emle_model, qm_region, system, context, topology, *args, **kwargs):
+    import torch as _torch
+    from emle.models import EMLE as _EMLE
+    from openmmtorch import TorchForce as _TorchForce
+
+    from .emle_force import EMLEForce as _EMLEForce
+
+    if emle_model:
+        _logger.info(f"Adding EMLE force with model '{emle_model}'.")
+        if emle_model == "default":
+            emle_model = None
+
+        device = _torch.device("cuda" if _torch.cuda.is_available() else "cpu")
+        dtype = _torch.float64
+
+        # Create the EMLE model
+        model = _EMLE(model=emle_model, device=device, dtype=dtype, *args, **kwargs)
+
+        # Create the QM and MM masks
+        qm_mask = _torch.zeros(topology.getNumAtoms(), dtype=_torch.bool)
+        qm_mask[qm_region] = True
+        mm_mask = ~qm_mask
+
+        # Get the atomic numbers
+        atomic_numbers = _torch.tensor(
+            [atom.element.atomic_number for atom in topology.atoms()]
+        )[qm_mask]
+
+        # Charges
+        non_bonded_force = [
+            force
+            for force in system.getForces()
+            if isinstance(force, _mm.NonbondedForce)
+        ][0]
+
+        charges = _torch.tensor(
+            [
+                non_bonded_force.getParticleParameters(i)[0]._value
+                for i in range(non_bonded_force.getNumParticles())
+            ]
+        )
+        charges_mm = charges[mm_mask]
+
+        # Create the EMLE force
+        emle_force = _EMLEForce(
+            model=model,
+            atomic_numbers=atomic_numbers.to(device=device, dtype=_torch.int64),
+            charges_mm=charges_mm.to(device=device, dtype=_torch.float64),
+            qm_mask=qm_mask.to(device=device, dtype=_torch.bool),
+            mm_mask=mm_mask.to(device=device, dtype=_torch.bool),
+            device=device,
+            dtype=dtype,
+        )
+
+        # Add the EMLE force to the system
+        emle_module = _torch.jit.script(emle_force)
+        emle_force = _TorchForce(emle_module)
+        system.addForce(emle_force)
+
+        # In order to ensure that OpenMM doesn’t perform mechanical embedding,
+        # we next need to zero the charges of the QM atoms in the MM system
+        # See: https://sire.openbiosim.org/tutorial/part08/02_emle.html
+        for i in qm_region:
+            _, sigma, epsilon = non_bonded_force.getParticleParameters(i)
+            non_bonded_force.setParticleParameters(i, 0, sigma, epsilon)
+
+        context.reinitialize(preserveState=True)
+    else:
+        _logger.info("No EMLE model provided. Skipping EMLE force.")
+
+    return system, context
+
+
 def remove_constraints(system: _mm.System, atoms: list[int]) -> _mm.System:
     """
     Remove constraints involving chosen atoms from the system.
