@@ -89,7 +89,7 @@ class ORCACalculator(BaseCalculator):
         file_path = _os.path.join(directory, output_file_name)
 
         try:
-            with open(file_path, "r") as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 for line in f:
                     if "FINAL SINGLE POINT ENERGY" in line:
                         if "Wavefunction not fully converged" in line:
