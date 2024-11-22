@@ -94,14 +94,11 @@ class LennardJonesPotential(_torch.nn.Module):
                         val.sigma.to_openmm().in_units_of(_unit.nanometers)._value,
                         dtype=_torch.float64,
                     )
-                    epsilon = (
-                        _torch.tensor(
-                            val.epsilon.to_openmm()
-                            .in_units_of(_unit.kilojoule_per_mole)
-                            ._value,
-                            dtype=_torch.float64,
-                        )
-                        + 1e-16
+                    epsilon = _torch.tensor(
+                        val.epsilon.to_openmm()
+                        .in_units_of(_unit.kilojoule_per_mole)
+                        ._value,
+                        dtype=_torch.float64,
                     )
 
                     # Dynamically register trainable parameters
@@ -200,8 +197,8 @@ class LennardJonesPotential(_torch.nn.Module):
             [self._lj_params[atom]["epsilon"] for atom in self._atoms_types]
         ).to(self._device, self._dtype)
 
-        sigma_tensor = _torch.abs(self._sigma_tensor)
-        epsilon_tensor = _torch.abs(self._epsilon_tensor)
+        sigma_tensor = _torch.clamp(_torch.abs(self._sigma_tensor), min=1e-16)
+        epsilon_tensor = _torch.clamp(_torch.abs(self._epsilon_tensor), min=1e-16)
 
         # Get the sigma and epsilon parameters
         xyz_qm = xyz[solute_mask]

@@ -57,7 +57,7 @@ class InteractionEnergyLoss(_BaseLoss):
         import openmm.unit as _unit
 
         if method.lower() == "boltzmann":
-            temperature = 500.0 * _unit.kelvin
+            temperature = 300.0 * _unit.kelvin
             kBT = (
                 _unit.BOLTZMANN_CONSTANT_kB
                 * _unit.AVOGADRO_CONSTANT_NA
@@ -71,7 +71,7 @@ class InteractionEnergyLoss(_BaseLoss):
                 n_samples, device=e_int_target.device, dtype=e_int_target.dtype
             )
         elif method.lower() == "non-boltzmann":
-            temperature = 500.0 * _unit.kelvin
+            temperature = 300.0 * _unit.kelvin
             kBT = (
                 _unit.BOLTZMANN_CONSTANT_kB
                 * _unit.AVOGADRO_CONSTANT_NA
@@ -115,7 +115,7 @@ class InteractionEnergyLoss(_BaseLoss):
         xyz_mm,
         solute_mask,
         solvent_mask,
-        l2_reg=10.0,
+        l2_reg=1.0,
     ):
         """
         Forward pass.
@@ -175,16 +175,22 @@ class InteractionEnergyLoss(_BaseLoss):
             raise NotImplementedError(f"Loss function {self._loss} not implemented")
 
         if l2_reg is not None:
+            epsilon_std = self._lj_potential._epsilon_tensor_initial.std()
+            sigma_std = self._lj_potential._sigma_tensor_initial.std()
+
             epsilon_diff = (
                 self._lj_potential._epsilon_tensor
                 - self._lj_potential._epsilon_tensor_initial
             )
+            epsilon_diff = epsilon_diff / epsilon_std
             sigma_diff = (
                 self._lj_potential._sigma_tensor
                 - self._lj_potential._sigma_tensor_initial
             )
+            sigma_diff = sigma_diff / sigma_std
+
             reg = l2_reg * (epsilon_diff.square().sum() + sigma_diff.square().sum())
-            loss += reg
+            loss = loss / target.std() + reg
 
         return (
             loss,

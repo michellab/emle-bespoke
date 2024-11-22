@@ -1,5 +1,7 @@
 """Module for generating dimer configurations and dimer curves."""
 
+import os as _os
+
 import numpy as _np
 import openmm.unit as _unit
 from loguru import logger as _logger
@@ -81,7 +83,7 @@ class DimerSampler(_BaseSampler):
 
         # Displace the solvent molecule along the vector
         dimer_curve = []
-        distances = _np.linspace(0.8, 1.3, 6)
+        distances = _np.linspace(0.7, 1.4, 8)
         for dist in distances:
             new_pos = ref_positions.copy()
             new_pos[solvent_mask] += (dist - 1.0) * dist_vec
@@ -89,13 +91,21 @@ class DimerSampler(_BaseSampler):
 
         return dimer_curve
 
+    @staticmethod
+    def write_dimer_curve_to_pdb(topology, curve, filename):
+        from openmm.app import PDBFile as _PDBFile
+
+        for i, config in enumerate(curve):
+            with open(f"{filename}_{i}.pdb", "w") as f:
+                _PDBFile.writeFile(topology, config * 10.0, f)
+
     def generate_dimers(
         self,
         n_samples: int,
         n_lowest: int,
         temperature: _unit.Quantity,
         sphere_radius: _unit.Quantity,
-        delta=1.0,
+        delta=0.5,
     ):
         from openmm import LocalEnergyMinimizer as _LocalEnergyMinimizer
 
@@ -161,7 +171,9 @@ class DimerSampler(_BaseSampler):
                     f"Optimizing configuration {i + 1} / {len(configurations_list)}"
                 )
             self._context.setPositions(config)
-            _LocalEnergyMinimizer.minimize(self._context, tolerance=0.5)
+            _LocalEnergyMinimizer.minimize(
+                self._context, tolerance=0.5, maxIterations=0
+            )
             optimised_configurations.append(
                 self._context.getState(getPositions=True)
                 .getPositions(asNumpy=True)
@@ -170,6 +182,11 @@ class DimerSampler(_BaseSampler):
             optimised_energies.append(
                 self._context.getState(getEnergy=True).getPotentialEnergy()._value
             )
+
+        # Remove NaNs from the optimized energies and configurations
+        valid_indices = ~_np.isnan(optimised_energies)
+        optimised_energies = _np.array(optimised_energies)[valid_indices]
+        optimised_configurations = _np.array(optimised_configurations)[valid_indices]
 
         # Get unique dimers with the lowest energy
         energies_unique, mask = _unique_with_delta(optimised_energies, delta=delta)
@@ -186,8 +203,8 @@ class DimerSampler(_BaseSampler):
 
     def sample(
         self,
-        n_samples: int = 10000,
-        n_lowest: int = 50,
+        n_samples: int = 50000,
+        n_lowest: int = 100,
         temperature: float = 1000.0,
         sphere_radius=0.5 * _unit.nanometer,
         delta: float = 1.0,
@@ -215,11 +232,24 @@ class DimerSampler(_BaseSampler):
             if curve is not None:
                 curves.append(curve)
 
+        # Write dimer curves to PDB
+        pdb_files_dir = "dimer_curves_pdb_files"
+        if not _os.path.exists(pdb_files_dir):
+            _os.makedirs(pdb_files_dir)
+
+        for i, curve in enumerate(curves):
+            _logger.debug(f"Writing dimer curve {i + 1} to PDB.")
+            self.write_dimer_curve_to_pdb(
+                self._topology, curve, _os.path.join(pdb_files_dir, f"dimer_{i}")
+            )
+
         # Calculate the interaction energy for each curve
         symbols_dimer = [_ATOMIC_NUMBERS_TO_SYMBOLS[an] for an in self._atomic_numbers]
         symbols_solute = [symbols_dimer[i] for i in solute_mask.nonzero()[0]]
         symbols_solvent = [symbols_dimer[i] for i in solvent_mask.nonzero()[0]]
 
+        solvent_model = ""
+        orca_simple_input = f"! wb97x-d3bj cc-pvtz TightSCF {solvent_model}"
         for i, curve in enumerate(curves):
             _logger.info(f"Calculating interaction energy for dimer curve {i + 1}.")
             _logger.debug("Calculating QM energy of solute.")
@@ -227,7 +257,7 @@ class DimerSampler(_BaseSampler):
                 elements=symbols_solute,
                 positions=curve[0][solute_mask] * 10.0,
                 directory="solute_vacuum",
-                orca_simple_input="! b3lyp cc-pvtz TightSCF D3BJ",
+                orca_simple_input=orca_simple_input,
                 orca_blocks="%MaxCore 1024\n%pal\nnprocs 8\nend\n",
             )
             _logger.debug("Calculating QM energy of solvent.")
@@ -235,7 +265,7 @@ class DimerSampler(_BaseSampler):
                 elements=symbols_solvent,
                 positions=curve[0][solvent_mask] * 10.0,
                 directory="solvent_vacuum",
-                orca_simple_input="! b3lyp cc-pvtz TightSCF D3BJ",
+                orca_simple_input=orca_simple_input,
                 orca_blocks="%MaxCore 1024\n%pal\nnprocs 8\nend\n",
             )
             for j, config in enumerate(curve):
@@ -246,7 +276,7 @@ class DimerSampler(_BaseSampler):
                     elements=symbols_dimer,
                     positions=config * 10.0,
                     directory="dimer_vacuum",
-                    orca_simple_input="! b3lyp cc-pvtz TightSCF D3BJ",
+                    orca_simple_input=orca_simple_input,
                     orca_blocks="%MaxCore 1024\n%pal\nnprocs 8\nend\n",
                 )
 

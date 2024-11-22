@@ -289,8 +289,8 @@ class BespokeModelTrainer:
         xyz_qm,
         xyz_mm,
         model=None,
-        lr=0.01,
-        epochs=500,
+        lr=0.0001,
+        epochs=100,
         print_every=10,
         alpha_static=None,
         beta_induced=None,
@@ -441,8 +441,8 @@ class BespokeModelTrainer:
         solvent_mask,
         lj_potential,
         model=None,
-        lr=0.01,
-        epochs=500,
+        lr=1e-8,
+        epochs=1,
         print_every=10,
     ):
         from ._train import train_model
@@ -528,6 +528,9 @@ class BespokeModelTrainer:
 
         # Store the fitted data for plotting
         e_int_fitted = []
+        e_static_fitted = []
+        e_ind_fitted = []
+        e_lj_fitted = []
         for i in range(len(atomic_numbers)):
             e_static, e_ind, e_lj = e_int_loss.calculate_predicted_interaction_energy(
                 atomic_numbers=atomic_numbers[i],
@@ -538,8 +541,15 @@ class BespokeModelTrainer:
                 solvent_mask=solvent_mask[i],
             )
             e_int = e_static + e_ind + e_lj
+            e_static_fitted.append(e_static.item())
+            e_ind_fitted.append(e_ind.item())
+            e_lj_fitted.append(e_lj.item())
             e_int_fitted.append(e_int.item())
+
         plot_data["e_int_fitted"] = _np.array(e_int_fitted)
+        plot_data["e_static_fitted"] = _np.array(e_static_fitted)
+        plot_data["e_ind_fitted"] = _np.array(e_ind_fitted)
+        plot_data["e_lj_fitted"] = _np.array(e_lj_fitted)
 
         # Write the plot data to a file
         plot_data_filename = f"{self._filename_prefix}_plot_data.mat"
@@ -553,6 +563,62 @@ class BespokeModelTrainer:
                     f"Optimal {name.split('.', 1)[-1][1:]}: {param.item():.8f}"
                 )
 
+        lj_potential.print_lj_parameters()
         _logger.info("Finished fitting LJ parameters.")
 
         return
+
+    def get_mbis_static_predictions(
+        self,
+        z,
+        charges_mm,
+        xyz_qm,
+        xyz_mm,
+        q_core,
+        q_val,
+        s,
+    ):
+        from emle.models import EMLE as _EMLE
+        from emle.train._utils import pad_to_max
+
+        from ._constants import ANGSTROM_TO_BOHR as _ANGSTROM_TO_BOHR
+        from ._constants import HARTREE_TO_KJ_MOL as _HARTREE_TO_KJ_MOL
+
+        # Create the EMLE base model
+        emle_base = _EMLE(
+            device=self._device,
+            dtype=self._dtype,
+        )._emle_base
+
+        # Convert reference MBIS data to tensors
+        xyz_qm = _torch.tensor(xyz_qm, dtype=self._dtype, device=self._device)
+        xyz_mm = pad_to_max(xyz_mm).to(device=self._device, dtype=self._dtype)
+        charges_mm = pad_to_max(charges_mm).to(device=self._device, dtype=self._dtype)
+        q_core = _torch.tensor(q_core, dtype=self._dtype, device=self._device)
+        q_val = _torch.tensor(q_val, dtype=self._dtype, device=self._device)
+        s = _torch.tensor(s, dtype=self._dtype, device=self._device)
+
+        q_total = q_core + q_val
+
+        xyz_qm_bohr = xyz_qm * _ANGSTROM_TO_BOHR
+        xyz_mm_bohr = xyz_mm * _ANGSTROM_TO_BOHR
+
+        # Get the mesh data
+        mesh_data = emle_base._get_mesh_data(xyz_qm_bohr, xyz_mm_bohr, s)
+
+        # Calculate the static and induced energy components
+        e_static = (
+            emle_base.get_static_energy(q_core, q_val, charges_mm, mesh_data)
+            * _HARTREE_TO_KJ_MOL
+        )
+
+        # Store the data for plotting
+        plot_data = {
+            "e_static_mbis": e_static.cpu().numpy(),
+        }
+
+        # Write the plot data to a file
+        plot_data_filename = f"{self._filename_prefix}_mbis_plot_data.mat"
+        _write_dict_to_file(plot_data, plot_data_filename)
+
+        return e_static

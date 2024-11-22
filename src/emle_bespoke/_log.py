@@ -51,7 +51,7 @@ def config_logger() -> None:
     log_level = _os.environ.get("EMLE_BESPOKE_LOG_LEVEL", default="INFO").upper()
     silence_loggers = int(_os.environ.get("EMLE_BESPOKE_FILTER_LOGGERS", default=1))
 
-    fmt = "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name:35}</cyan> | {message}"
+    fmt = "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name:40}</cyan> | {message}"
 
     logger.remove()  # Remove the default handler
     logger.add(

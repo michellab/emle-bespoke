@@ -18,10 +18,14 @@ from ..bespoke import BespokeModelTrainer as _BespokeModelTrainer
 from ..calculators import ORCACalculator as _ORCACalculator
 from ..lj_fitting import LennardJonesPotential as _LennardJonesPotential
 from ..samplers._dimers import DimerSampler as _DimerSampler
-from ..utils import create_dimer_topology as _create_dimer_topology
-from ..utils import create_mixed_system as _create_mixed_system
-from ..utils import create_simulation as _create_simulation
-from ..utils import remove_constraints as _remove_constraints
+from ..utils import (
+    add_emle_force as _add_emle_force,
+    create_dimer_topology as _create_dimer_topology,
+    create_mixed_system as _create_mixed_system,
+    create_simulation as _create_simulation,
+    remove_constraints as _remove_constraints,
+    write_system_to_xml as _write_system_to_xml,
+)
 
 
 def main():
@@ -72,6 +76,15 @@ def main():
         help="The machine learning model to use for the solute.",
     )
 
+    parser.add_argument(
+        "--emle_model",
+        type=str,
+        default="default",
+        help="The EMLE model to use for the solute.",
+    )
+
+    parser.add_argument("--debug", action="store_true", help="Enable debug.")
+
     # Parse the arguments
     args = parser.parse_args()
 
@@ -96,6 +109,11 @@ def main():
     for arg in vars(args):
         _logger.info(f"{arg}: {getattr(args, arg)}")
     _logger.info("══════════════════════════════════════════════════════════════\n")
+
+    if args.debug:
+        import torch as _torch
+
+        _torch.autograd.set_detect_anomaly(True)
 
     # Create topology
     topology_off = _create_dimer_topology(
@@ -129,6 +147,16 @@ def main():
         args.ml_model, qm_region, simulation
     )
 
+    """
+    # Add the EMLE force
+    system, context = _add_emle_force(
+        args.emle_model, qm_region, system, context, topology
+    )
+
+    # Write the system to an XML file
+    _write_system_to_xml(system, "initial_dimer.xml")
+    """
+    # Create the reference dimer sampler
     ref_sampler = _DimerSampler(
         system=system,
         context=context,
@@ -142,23 +170,40 @@ def main():
     lj_potential = _LennardJonesPotential(
         topology_off=topology_off,
         forcefield=force_field,
-        parameters_to_fit={"n-tip3p-O": ["sigma", "epsilon"]},
+        parameters_to_fit={
+            #"n7": ["sigma", "epsilon"],
+            #"n14": ["sigma", "epsilon"],
+            #"n16": ["sigma", "epsilon"],
+            #"n19": ["sigma", "epsilon"],
+            #"n3": ["sigma", "epsilon"],
+            # "n12": ["sigma", "epsilon"],
+            "n-tip3p-O": ["sigma", "epsilon"],
+            #"n-tip3p-H": ["sigma", "epsilon"],
+        },
     )
 
     # Fit the Lennard-Jones potential
     emle_bespoke = _BespokeModelTrainer(
         ref_sampler, filename_prefix=args.filename_prefix
     )
+    """
     emle_bespoke.sample_dimer_curves()
+    """
+    ref_sampler.reference_data.read("/home/joaomorado/test/a/water-benzene-sapt.pkl")
+    # ref_sampler.reference_data.read("/home/joaomorado/test/a/water-methanol.pkl")
+    # ref_sampler.reference_data.read("/home/joaomorado/test/a/solvator/data_solvator.pkl")
+
+    ni = 0
+    nf = 16
     emle_bespoke.fit_lj(
         lj_potential=lj_potential,
-        xyz_qm=ref_sampler.reference_data["xyz_qm"],
-        xyz_mm=ref_sampler.reference_data["xyz_mm"],
-        atomic_numbers=ref_sampler.reference_data["z"],
-        charges_mm=ref_sampler.reference_data["charges_mm"],
-        e_int_target=ref_sampler.reference_data["e_int"],
-        solute_mask=ref_sampler.reference_data["solute_mask"],
-        solvent_mask=ref_sampler.reference_data["solvent_mask"],
+        xyz_qm=ref_sampler.reference_data["xyz_qm"][ni:nf],
+        xyz_mm=ref_sampler.reference_data["xyz_mm"][ni:nf],
+        atomic_numbers=ref_sampler.reference_data["z"][ni:nf],
+        charges_mm=ref_sampler.reference_data["charges_mm"][ni:nf],
+        e_int_target=ref_sampler.reference_data["sapt_all"][ni:nf],
+        solute_mask=ref_sampler.reference_data["solute_mask"][ni:nf],
+        solvent_mask=ref_sampler.reference_data["solvent_mask"][ni:nf],
     )
 
     msg = r"""
