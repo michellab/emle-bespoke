@@ -83,7 +83,7 @@ class DimerSampler(_BaseSampler):
 
         # Displace the solvent molecule along the vector
         dimer_curve = []
-        distances = _np.linspace(0.7, 1.4, 8)
+        distances = _np.linspace(0.8, 1.2, 5)
         for dist in distances:
             new_pos = ref_positions.copy()
             new_pos[solvent_mask] += (dist - 1.0) * dist_vec
@@ -207,7 +207,7 @@ class DimerSampler(_BaseSampler):
         n_lowest: int = 100,
         temperature: float = 1000.0,
         sphere_radius=0.5 * _unit.nanometer,
-        counterpoise_correction: bool = False,
+        counterpoise_correction: bool = True,
         delta: float = 1.0,
     ) -> _ReferenceData:
         energies_dimers, configs_dimers = self.generate_dimers(
@@ -253,28 +253,52 @@ class DimerSampler(_BaseSampler):
         orca_simple_input = f"! wb97x-d3bj cc-pvtz TightSCF {solvent_model}"
         for i, curve in enumerate(curves):
             _logger.info(f"Calculating interaction energy for dimer curve {i + 1}.")
-            _logger.debug("Calculating QM energy of solute.")
 
-            solute_energy = self._qm_calculator.get_potential_energy(
-                elements=symbols_solute if not counterpoise_correction else symbols_solute + [symbol + " :" for symbol in symbols_solvent],
-                positions=curve[0][solute_mask] * 10.0 if not counterpoise_correction else config * 10.0,
-                directory="solute_vacuum",
-                orca_simple_input=orca_simple_input,
-                orca_blocks="%MaxCore 1024\n%pal\nnprocs 8\nend\n",
-            )
-            _logger.debug("Calculating QM energy of solvent.")
-            solvent_energy = self._qm_calculator.get_potential_energy(
-                elements=symbols_solvent if not counterpoise_correction else [symbol + " :" for symbol in symbols_solute] + symbols_solvent,
-                positions=curve[0][solvent_mask] * 10.0 if not counterpoise_correction else config * 10.0,
-                directory="solvent_vacuum",
-                orca_simple_input=orca_simple_input,
-                orca_blocks="%MaxCore 1024\n%pal\nnprocs 8\nend\n",
-            )
+            if not counterpoise_correction:
+                _logger.debug("Calculating QM energy of solute without CP correction.")
+                solute_energy = self._qm_calculator.get_potential_energy(
+                    elements=symbols_solute,
+                    positions=curve[0][solute_mask] * 10.0,
+                    directory="solute_vacuum",
+                    orca_simple_input=orca_simple_input,
+                    orca_blocks="%MaxCore 1024\n%pal\nnprocs 8\nend\n",
+                )
+                _logger.debug("Calculating QM energy of solvent without CP correction.")
+                solvent_energy = self._qm_calculator.get_potential_energy(
+                    elements=symbols_solvent,
+                    positions=curve[0][solvent_mask] * 10.0,
+                    directory="solvent_vacuum",
+                    orca_simple_input=orca_simple_input,
+                    orca_blocks="%MaxCore 1024\n%pal\nnprocs 8\nend\n",
+                )
 
             for j, config in enumerate(curve):
                 _logger.info(
                     f"Calculating interaction energy for configuration {j + 1} / {len(curve)}."
                 )
+                if counterpoise_correction:
+                    _logger.debug("Calculating QM energy of solute with CP correction.")
+                    solute_energy = self._qm_calculator.get_potential_energy(
+                        elements=symbols_solute
+                        + [symbol + " :" for symbol in symbols_solvent],
+                        positions=config * 10.0,
+                        directory="solute_vacuum",
+                        orca_simple_input=orca_simple_input,
+                        orca_blocks="%MaxCore 1024\n%pal\nnprocs 8\nend\n",
+                    )
+                    _logger.debug(
+                        "Calculating QM energy of solvent with CP correction."
+                    )
+                    solvent_energy = self._qm_calculator.get_potential_energy(
+                        elements=[symbol + " :" for symbol in symbols_solute]
+                        + symbols_solvent,
+                        positions=config * 10.0,
+                        directory="solvent_vacuum",
+                        orca_simple_input=orca_simple_input,
+                        orca_blocks="%MaxCore 1024\n%pal\nnprocs 8\nend\n",
+                    )
+
+                _logger.debug("Calculating QM energy of dimer.")
                 dimer_energy = self._qm_calculator.get_potential_energy(
                     elements=symbols_dimer,
                     positions=config * 10.0,
