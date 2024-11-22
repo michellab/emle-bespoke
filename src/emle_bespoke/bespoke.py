@@ -441,8 +441,8 @@ class BespokeModelTrainer:
         solvent_mask,
         lj_potential,
         model=None,
-        lr=1e-8,
-        epochs=1,
+        lr=5e-4,
+        epochs=500,
         print_every=10,
     ):
         from ._train import train_model
@@ -570,7 +570,6 @@ class BespokeModelTrainer:
 
     def get_mbis_static_predictions(
         self,
-        z,
         charges_mm,
         xyz_qm,
         xyz_mm,
@@ -597,8 +596,6 @@ class BespokeModelTrainer:
         q_core = _torch.tensor(q_core, dtype=self._dtype, device=self._device)
         q_val = _torch.tensor(q_val, dtype=self._dtype, device=self._device)
         s = _torch.tensor(s, dtype=self._dtype, device=self._device)
-
-        q_total = q_core + q_val
 
         xyz_qm_bohr = xyz_qm * _ANGSTROM_TO_BOHR
         xyz_mm_bohr = xyz_mm * _ANGSTROM_TO_BOHR

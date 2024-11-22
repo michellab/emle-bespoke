@@ -11,8 +11,6 @@ from loguru import logger as _logger
 from .._log import log_banner as _log_banner
 
 
-
-
 def main():
     parser = argparse.ArgumentParser(
         description="Generate reference data and train a bespoke EMLE model."
@@ -92,7 +90,7 @@ def main():
     except SystemExit as e:
         _logger.error(f"Unrecognized argument(s) detected: {e}")
         exit(1)
-    
+
     # Imports from the emle-bespoke package
     from ..bespoke import BespokeModelTrainer as _BespokeModelTrainer
 
@@ -110,7 +108,6 @@ def main():
         _logger.info(f"{arg}: {getattr(args, arg)}")
     _logger.info("══════════════════════════════════════════════════════════════\n")
 
-    # 
     if not os.path.exists(args.reference_data):
         _logger.error(f"Reference data file not found: {args.reference_data}")
         raise FileNotFoundError(f"Reference data file not found: {args.reference_data}")
@@ -143,13 +140,12 @@ def main():
     )
 
     emle_bespoke.get_mbis_static_predictions(
-        z=reference_data["z"],
         charges_mm=reference_data["charges_mm"],
         xyz_qm=reference_data["xyz_qm"],
         xyz_mm=reference_data["xyz_mm"],
         q_core=reference_data["q_core"],
         q_val=reference_data["q_val"],
-        s=reference_data["s"]
+        s=reference_data["s"],
     )
 
     msg = r"""

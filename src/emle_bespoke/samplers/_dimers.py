@@ -83,7 +83,8 @@ class DimerSampler(_BaseSampler):
 
         # Displace the solvent molecule along the vector
         dimer_curve = []
-        distances = _np.linspace(0.8, 1.2, 5)
+        # distances = _np.linspace(0.8, 1.2, 5)
+        distances = _np.linspace(0.7, 1.4, 8)
         for dist in distances:
             new_pos = ref_positions.copy()
             new_pos[solvent_mask] += (dist - 1.0) * dist_vec
@@ -207,7 +208,7 @@ class DimerSampler(_BaseSampler):
         n_lowest: int = 100,
         temperature: float = 1000.0,
         sphere_radius=0.5 * _unit.nanometer,
-        counterpoise_correction: bool = True,
+        counterpoise_correction: bool = False,
         delta: float = 1.0,
     ) -> _ReferenceData:
         energies_dimers, configs_dimers = self.generate_dimers(
@@ -250,7 +251,7 @@ class DimerSampler(_BaseSampler):
         symbols_solvent = [symbols_dimer[i] for i in solvent_mask.nonzero()[0]]
 
         solvent_model = ""
-        orca_simple_input = f"! wb97x-d3bj cc-pvtz TightSCF {solvent_model}"
+        orca_simple_input = f"! b3lyp d3bj cc-pvtz TightSCF {solvent_model}"
         for i, curve in enumerate(curves):
             _logger.info(f"Calculating interaction energy for dimer curve {i + 1}.")
 

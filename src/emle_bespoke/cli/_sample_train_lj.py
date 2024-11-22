@@ -18,19 +18,17 @@ from ..bespoke import BespokeModelTrainer as _BespokeModelTrainer
 from ..calculators import ORCACalculator as _ORCACalculator
 from ..lj_fitting import LennardJonesPotential as _LennardJonesPotential
 from ..samplers._dimers import DimerSampler as _DimerSampler
-from ..utils import (
-    add_emle_force as _add_emle_force,
-    create_dimer_topology as _create_dimer_topology,
-    create_mixed_system as _create_mixed_system,
-    create_simulation as _create_simulation,
-    remove_constraints as _remove_constraints,
-    write_system_to_xml as _write_system_to_xml,
-)
+from ..utils import add_emle_force as _add_emle_force
+from ..utils import create_dimer_topology as _create_dimer_topology
+from ..utils import create_mixed_system as _create_mixed_system
+from ..utils import create_simulation as _create_simulation
+from ..utils import remove_constraints as _remove_constraints
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate reference data and train a bespoke EMLE model."
+        description="Generate reference data and train a bespoke EMLE model.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
     parser.add_argument(
@@ -81,6 +79,27 @@ def main():
         type=str,
         default="default",
         help="The EMLE model to use for the solute.",
+    )
+
+    parser.add_argument(
+        "--lr",
+        type=float,
+        default=0.001,
+        help="The learning rate for fitting LJ parameters.",
+    )
+
+    parser.add_argument(
+        "--epochs",
+        type=int,
+        default=100,
+        help="The number of epochs for fitting LJ parameters.",
+    )
+
+    parser.add_argument(
+        "--print-every",
+        type=int,
+        default=10,
+        help="Print the loss every N epochs.",
     )
 
     parser.add_argument("--debug", action="store_true", help="Enable debug.")
@@ -171,14 +190,14 @@ def main():
         topology_off=topology_off,
         forcefield=force_field,
         parameters_to_fit={
-            #"n7": ["sigma", "epsilon"],
-            #"n14": ["sigma", "epsilon"],
-            #"n16": ["sigma", "epsilon"],
-            #"n19": ["sigma", "epsilon"],
-            #"n3": ["sigma", "epsilon"],
-            # "n12": ["sigma", "epsilon"],
-            "n-tip3p-O": ["sigma", "epsilon"],
-            #"n-tip3p-H": ["sigma", "epsilon"],
+            # "n7": ["sigma", "epsilon"],
+            # "n16": ["sigma", "epsilon"],
+            # "n14": ["sigma", "epsilon"],
+            "n19": ["sigma", "epsilon"],
+            # "n3": ["sigma", "epsilon"],
+            "n12": ["sigma", "epsilon"],
+            # "n-tip3p-O": ["sigma", "epsilon"],
+            # "n-tip3p-H": ["sigma", "epsilon"],
         },
     )
 
@@ -189,8 +208,8 @@ def main():
     """
     emle_bespoke.sample_dimer_curves()
     """
-    ref_sampler.reference_data.read("/home/joaomorado/test/a/water-benzene-sapt.pkl")
-    # ref_sampler.reference_data.read("/home/joaomorado/test/a/water-methanol.pkl")
+    # ref_sampler.reference_data.read("/home/joaomorado/mnsol_sampling/run_fixed_test/dimers/ligand_ref_data.pkl")
+    ref_sampler.reference_data.read("/home/joaomorado/test/a/water-methanol.pkl")
     # ref_sampler.reference_data.read("/home/joaomorado/test/a/solvator/data_solvator.pkl")
 
     ni = 0
@@ -201,9 +220,13 @@ def main():
         xyz_mm=ref_sampler.reference_data["xyz_mm"][ni:nf],
         atomic_numbers=ref_sampler.reference_data["z"][ni:nf],
         charges_mm=ref_sampler.reference_data["charges_mm"][ni:nf],
-        e_int_target=ref_sampler.reference_data["sapt_all"][ni:nf],
+        e_int_target=ref_sampler.reference_data["e_int"][ni:nf],
         solute_mask=ref_sampler.reference_data["solute_mask"][ni:nf],
         solvent_mask=ref_sampler.reference_data["solvent_mask"][ni:nf],
+        model=args.emle_model if args.emle_model != "default" else None,
+        lr=args.lr,
+        epochs=args.epochs,
+        print_every=args.print_every,
     )
 
     msg = r"""
