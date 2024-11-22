@@ -37,7 +37,9 @@ def create_molecule(smiles: str) -> _Molecule:
         raise RuntimeError(f"Failed to create molecule from SMILES '{smiles}': {e}")
 
 
-def create_dimer_topology(solute_smiles: str, solvent_smiles: str):
+def create_dimer_topology(
+    solute_smiles: str, solvent_smiles: str, n_solvent: int = 1
+) -> _Topology:
     try:
         _logger.info("Creating OpenFF dimer topology.")
         _logger.info(f"Solute SMILES: {solute_smiles}")
@@ -57,7 +59,7 @@ def create_dimer_topology(solute_smiles: str, solvent_smiles: str):
         solvent.generate_conformers(n_conformers=1)
 
         # Create the topology
-        topology = _Topology.from_molecules([solute, solvent])
+        topology = _Topology.from_molecules([solute] + [solvent] * n_solvent)
     except Exception as e:
         _logger.error(f"Failed to create OpenFF dimer topology: {e}")
         raise RuntimeError(f"Failed to create OpenFF dimer topology: {e}")
@@ -142,7 +144,7 @@ def create_simulation(
             additional_forces=additional_forces,
         )
 
-        simulation.minimizeEnergy()
+        # simulation.minimizeEnergy()
         simulation.context.setVelocitiesToTemperature(temperature * _unit.kelvin)
         simulation.context.computeVirtualSites()
 
@@ -313,3 +315,18 @@ def write_dict_to_file(dict_to_write, filename):
         if v is not None
     }
     scipy.io.savemat(filename, dict_filtered)
+
+
+def write_system_to_xml(system: _mm.System, filename: str) -> None:
+    """
+    Write the System to an XML file.
+
+    Parameters
+    ----------
+    system : openmm.System
+        The System to write.
+    filename : str
+        The name of the file to write.
+    """
+    with open(filename, "w") as outfile:
+        outfile.write(_mm.XmlSerializer.serialize(system))
