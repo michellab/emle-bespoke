@@ -2,6 +2,7 @@
 import numpy as _np
 import torch as _torch
 from emle.models import EMLEBase as _EMLEBase
+from emle.train._utils import pad_to_max
 from loguru import logger as _logger
 
 from .reference_data import ReferenceData as _ReferenceData
@@ -354,16 +355,30 @@ class BespokeModelTrainer:
             beta_induced if beta_induced is not None else self._beta_induced
         )
 
-        _logger.info(f"Initial alpha_static: {alpha_static}")
-        _logger.info(f"Initial beta_induced: {beta_induced}")
+        _logger.info(f"Initial alpha_static: {self._alpha_static}")
+        _logger.info(f"Initial beta_induced: {self._beta_induced}")
 
         # Create the patched model
         patched_model = EMLEPatched(
             model=model,
             alpha_static=self._alpha_static,
             beta_induced=self._beta_induced,
-            device=xyz_mm[0].device,
-            dtype=xyz_mm[0].dtype,
+            device=self._device,
+            dtype=self._dtype,
+        )
+
+        # Convert numpy arrays to tensors
+        atomic_numbers = pad_to_max(atomic_numbers).to(
+            device=self._device, dtype=_torch.int64
+        )
+        charges_mm = pad_to_max(charges_mm).to(device=self._device, dtype=self._dtype)
+        xyz_qm = pad_to_max(xyz_qm).to(device=self._device, dtype=self._dtype)
+        xyz_mm = pad_to_max(xyz_mm).to(device=self._device, dtype=self._dtype)
+        e_static_target = _torch.tensor(e_static_target).to(
+            device=self._device, dtype=self._dtype
+        )
+        e_ind_target = _torch.tensor(e_ind_target).to(
+            device=self._device, dtype=self._dtype
         )
 
         # Patch the model
@@ -374,8 +389,8 @@ class BespokeModelTrainer:
             epochs=epochs,
             print_every=print_every,
             emle_model=patched_model,
-            e_static_target=_torch.stack(e_static_target),
-            e_ind_target=_torch.stack(e_ind_target),
+            e_static_target=e_static_target,
+            e_ind_target=e_ind_target,
             atomic_numbers=atomic_numbers,
             charges_mm=charges_mm,
             xyz_qm=xyz_qm,
@@ -385,8 +400,8 @@ class BespokeModelTrainer:
         self._alpha_static = patched_model.alpha_static.item()
         self._beta_induced = patched_model.beta_induced.item()
 
-        _logger.info(f"Optimal alpha_static: {alpha_static}")
-        _logger.info(f"Optimal beta_induced: {beta_induced}")
+        _logger.info(f"Optimal alpha_static: {self._alpha_static:.4f}")
+        _logger.info(f"Optimal beta_induced: {self._beta_induced:.4f}")
         _logger.info("Finished patching the model.")
 
         return patched_model, alpha_static, beta_induced
@@ -468,19 +483,18 @@ class BespokeModelTrainer:
         )
 
         # Convert reference data to tensors
-        # and place them on the correct device and with the correct dtype
-        atomic_numbers = _torch.tensor(
-            atomic_numbers, device=self._device, dtype=_torch.int64
+        atomic_numbers = pad_to_max(atomic_numbers).to(
+            device=self._device, dtype=_torch.int64
         )
-        charges_mm = _torch.tensor(charges_mm, device=self._device, dtype=self._dtype)
-        xyz_qm = _torch.tensor(xyz_qm, device=self._device, dtype=self._dtype)
-        xyz_mm = _torch.tensor(xyz_mm, device=self._device, dtype=self._dtype)
-        solute_mask = _torch.tensor(solute_mask, device=self._device, dtype=_torch.bool)
-        solvent_mask = _torch.tensor(
-            solvent_mask, device=self._device, dtype=_torch.bool
+        charges_mm = pad_to_max(charges_mm).to(device=self._device, dtype=self._dtype)
+        xyz_qm = pad_to_max(xyz_qm).to(device=self._device, dtype=self._dtype)
+        xyz_mm = pad_to_max(xyz_mm).to(device=self._device, dtype=self._dtype)
+        solute_mask = pad_to_max(solute_mask).to(device=self._device, dtype=_torch.bool)
+        solvent_mask = pad_to_max(solvent_mask).to(
+            device=self._device, dtype=_torch.bool
         )
-        e_int_target = _torch.tensor(
-            e_int_target, device=self._device, dtype=self._dtype
+        e_int_target = pad_to_max(e_int_target).to(
+            device=self._device, dtype=self._dtype
         )
 
         e_int_loss = _InteractionEnergyLoss(
@@ -578,7 +592,6 @@ class BespokeModelTrainer:
         s,
     ):
         from emle.models import EMLE as _EMLE
-        from emle.train._utils import pad_to_max
 
         from ._constants import ANGSTROM_TO_BOHR as _ANGSTROM_TO_BOHR
         from ._constants import HARTREE_TO_KJ_MOL as _HARTREE_TO_KJ_MOL
@@ -590,12 +603,12 @@ class BespokeModelTrainer:
         )._emle_base
 
         # Convert reference MBIS data to tensors
-        xyz_qm = _torch.tensor(xyz_qm, dtype=self._dtype, device=self._device)
+        xyz_qm = pad_to_max(xyz_qm).to(device=self._device, dtype=self._dtype)
         xyz_mm = pad_to_max(xyz_mm).to(device=self._device, dtype=self._dtype)
         charges_mm = pad_to_max(charges_mm).to(device=self._device, dtype=self._dtype)
-        q_core = _torch.tensor(q_core, dtype=self._dtype, device=self._device)
-        q_val = _torch.tensor(q_val, dtype=self._dtype, device=self._device)
-        s = _torch.tensor(s, dtype=self._dtype, device=self._device)
+        q_core = pad_to_max(q_core).to(device=self._device, dtype=self._dtype)
+        q_val = pad_to_max(q_val).to(device=self._device, dtype=self._dtype)
+        s = pad_to_max(s).to(device=self._device, dtype=self._dtype)
 
         xyz_qm_bohr = xyz_qm * _ANGSTROM_TO_BOHR
         xyz_mm_bohr = xyz_mm * _ANGSTROM_TO_BOHR
