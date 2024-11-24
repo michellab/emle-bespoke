@@ -37,6 +37,7 @@ class EMLEPatched(_EMLE):
         result: torch.Tensor (2,)
             The static and induced EMLE energy components in Hartree.
         """
-        e_static, e_ind = super().forward(atomic_numbers, charges_mm, xyz_qm, xyz_mm)
-
+        output = super().forward(atomic_numbers, charges_mm, xyz_qm, xyz_mm)
+        e_static = output[:, 0]
+        e_ind = output[:, 1]
         return self.alpha_static * e_static, self.beta_induced * e_ind

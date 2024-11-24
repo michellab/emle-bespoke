@@ -74,10 +74,29 @@ def main():
     )
 
     parser.add_argument(
+        "--lr-patch",
+        type=float,
+        default=0.001,
+        help="The learning rate for patching the model.",
+    )
+
+    parser.add_argument(
         "--print-every",
         type=int,
         default=10,
         help="Print the loss every N epochs.",
+    )
+
+    parser.add_argument(
+        "--patch",
+        action="store_true",
+        help="Patch the model after training.",
+    )
+
+    parser.add_argument(
+        "--mbis",
+        action="store_true",
+        help="Calculate the MBIS static energy.",
     )
 
     # Parse the arguments
@@ -116,10 +135,12 @@ def main():
         with open(args.reference_data, "rb") as f:
             reference_data = pickle.load(f)
 
-    # Train the bespoke EMLE model
+    # Initialize the bespoke EMLE model trainer
     emle_bespoke = _BespokeModelTrainer(
         reference_data=args.reference_data, filename_prefix=args.filename_prefix
     )
+
+    # Train the bespoke EMLE model
     emle_bespoke.train_model(
         z=reference_data["z"],
         xyz=reference_data["xyz_qm"],
@@ -139,14 +160,31 @@ def main():
         print_every=args.print_every,
     )
 
-    emle_bespoke.get_mbis_static_predictions(
-        charges_mm=reference_data["charges_mm"],
-        xyz_qm=reference_data["xyz_qm"],
-        xyz_mm=reference_data["xyz_mm"],
-        q_core=reference_data["q_core"],
-        q_val=reference_data["q_val"],
-        s=reference_data["s"],
-    )
+    # Patch the bespoke EMLE model
+    if args.patch:
+        emle_bespoke.patch_model(
+            e_static_target=reference_data["e_static"],
+            e_ind_target=reference_data["e_ind"],
+            atomic_numbers=reference_data["z"],
+            charges_mm=reference_data["charges_mm"],
+            xyz_qm=reference_data["xyz_qm"],
+            xyz_mm=reference_data["xyz_mm"],
+            model=args.filename_prefix + "_bespoke.mat",
+            lr=args.lr_patch,
+            epochs=args.epochs,
+            print_every=args.print_every,
+        )
+
+    if args.mbis:
+        # Calculate the MBIS static energy
+        emle_bespoke.get_mbis_static_predictions(
+            charges_mm=reference_data["charges_mm"],
+            xyz_qm=reference_data["xyz_qm"],
+            xyz_mm=reference_data["xyz_mm"],
+            q_core=reference_data["q_core"],
+            q_val=reference_data["q_val"],
+            s=reference_data["s"],
+        )
 
     msg = r"""
 ╔════════════════════════════════════════════════════════════╗

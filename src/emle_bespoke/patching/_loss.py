@@ -41,18 +41,10 @@ class PatchingLoss(_BaseLoss):
         xyz_mm: torch.Tensor (NBATCH, N_MM_ATOMS, 3)
             Positions of MM atoms in Angstrom.
         """
-        # Calculate EMLE predictions for static and induced components
-        e_static_list = []
-        e_ind_list = []
-        for i in range(len(atomic_numbers)):
-            e_static_i, e_ind_i = self._emle_model(
-                atomic_numbers[i], charges_mm[i], xyz_qm[i], xyz_mm[i]
-            )
-            e_static_list.append(e_static_i)
-            e_ind_list.append(e_ind_i)
-
-        e_static = _torch.stack(e_static_list) * HARTREE_TO_KJ_MOL
-        e_ind = _torch.stack(e_ind_list) * HARTREE_TO_KJ_MOL
+        # Calculate EMLE predictions for static and induced components in a batched manner
+        e_static, e_ind = self._emle_model(atomic_numbers, charges_mm, xyz_qm, xyz_mm)
+        e_static = e_static * HARTREE_TO_KJ_MOL
+        e_ind = e_ind * HARTREE_TO_KJ_MOL
 
         target = e_static_target + e_ind_target
         values = e_static + e_ind
