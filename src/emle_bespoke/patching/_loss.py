@@ -21,7 +21,15 @@ class PatchingLoss(_BaseLoss):
         self._loss = loss
 
     def forward(
-        self, e_static_target, e_ind_target, atomic_numbers, charges_mm, xyz_qm, xyz_mm
+        self,
+        e_static_target,
+        e_ind_target,
+        atomic_numbers,
+        charges_mm,
+        xyz_qm,
+        xyz_mm,
+        fit_e_static=True,
+        fit_e_ind=True,
     ):
         """
         Forward pass.
@@ -40,14 +48,23 @@ class PatchingLoss(_BaseLoss):
             Positions of QM atoms in Angstrom.
         xyz_mm: torch.Tensor (NBATCH, N_MM_ATOMS, 3)
             Positions of MM atoms in Angstrom.
+        fit_e_static: bool
+            Whether to fit the static component.
+        fit_e_ind: bool
+            Whether to fit the induced component.
         """
         # Calculate EMLE predictions for static and induced components in a batched manner
         e_static, e_ind = self._emle_model(atomic_numbers, charges_mm, xyz_qm, xyz_mm)
         e_static = e_static * HARTREE_TO_KJ_MOL
         e_ind = e_ind * HARTREE_TO_KJ_MOL
 
-        target = e_static_target + e_ind_target
-        values = e_static + e_ind
+        target = (e_static_target if fit_e_static else 0) + (
+            e_ind_target if fit_e_ind else 0
+        )
+        values = (e_static if fit_e_static else 0) + (e_ind if fit_e_ind else 0)
+
+        if not fit_e_static and not fit_e_ind:
+            raise ValueError("At least one of fit_e_static or fit_e_ind must be True")
 
         return (
             self._loss(values, target),
