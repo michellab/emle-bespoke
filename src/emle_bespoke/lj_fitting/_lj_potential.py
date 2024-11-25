@@ -188,6 +188,10 @@ class LennardJonesPotential(_torch.nn.Module):
         torch.Tensor
             The total Lennard-Jones potential energy.
         """
+        # TODO: generalize this
+        solute_mask = solute_mask[0]
+        solvent_mask = solvent_mask[0]
+
         # Create the sigma and epsilon tensors with updated parameters
         self._sigma_tensor = _torch.stack(
             [self._lj_params[atom]["sigma"] for atom in self._atoms_types]
@@ -201,8 +205,8 @@ class LennardJonesPotential(_torch.nn.Module):
         epsilon_tensor = _torch.clamp(_torch.abs(self._epsilon_tensor), min=1e-16)
 
         # Get the sigma and epsilon parameters
-        xyz_qm = xyz[solute_mask]
-        xyz_mm = xyz[solvent_mask]
+        xyz_qm = xyz[:, solute_mask, :]
+        xyz_mm = xyz[:, solvent_mask, :]
         solute_sigma = sigma_tensor[solute_mask]
         solvent_sigma = sigma_tensor[solvent_mask]
         solute_epsilon = epsilon_tensor[solute_mask]
@@ -214,6 +218,8 @@ class LennardJonesPotential(_torch.nn.Module):
         # Lorentz-Berthelot mixing rules
         sigma = 0.5 * (solvent_sigma[:, None] + solute_sigma[None, :])
         epsilon = _torch.sqrt(solvent_epsilon[:, None] * solute_epsilon[None, :])
+
+        print(sigma.shape, epsilon.shape, distances.shape)
 
         # Lennard-Jones potential
         r6 = (sigma / distances) ** 6

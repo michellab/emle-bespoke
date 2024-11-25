@@ -87,6 +87,14 @@ class InteractionEnergyLoss(_BaseLoss):
     def calculate_predicted_interaction_energy(
         self, atomic_numbers, charges_mm, xyz_qm, xyz_mm, solute_mask, solvent_mask
     ):
+        if atomic_numbers.ndim == 1:
+            atomic_numbers = atomic_numbers.unsqueeze(0)
+            charges_mm = charges_mm.unsqueeze(0)
+            xyz_qm = xyz_qm.unsqueeze(0)
+            xyz_mm = xyz_mm.unsqueeze(0)
+            solvent_mask = solvent_mask.unsqueeze(0)
+            solute_mask = solute_mask.unsqueeze(0)
+
         # Calculate EMLE predictions for static and induced components
         e_static, e_ind = self._emle_model.forward(
             atomic_numbers,
@@ -99,7 +107,7 @@ class InteractionEnergyLoss(_BaseLoss):
 
         # Calculate Lennard-Jones potential energy
         e_lj = self._lj_potential.forward(
-            _torch.cat([xyz_qm, xyz_mm], dim=0),
+            _torch.cat([xyz_qm, xyz_mm], dim=1),
             solute_mask=solute_mask,
             solvent_mask=solvent_mask,
         )
@@ -139,27 +147,15 @@ class InteractionEnergyLoss(_BaseLoss):
         l2_reg: float or None
             L2 regularization strength. If None, no regularization is applied.
         """
-        # Calculate EMLE predictions for static and induced components
-        e_static_list = []
-        e_ind_list = []
-        e_lj_list = []
-
-        for i in range(len(atomic_numbers)):
-            e_static, e_ind, e_lj = self.calculate_predicted_interaction_energy(
-                atomic_numbers=atomic_numbers[i],
-                charges_mm=charges_mm[i],
-                xyz_qm=xyz_qm[i],
-                xyz_mm=xyz_mm[i],
-                solute_mask=solute_mask[i],
-                solvent_mask=solvent_mask[i],
-            )
-            e_static_list.append(e_static)
-            e_ind_list.append(e_ind)
-            e_lj_list.append(e_lj)
-
-        e_static = _torch.stack(e_static_list)
-        e_ind = _torch.stack(e_ind_list)
-        e_lj = _torch.stack(e_lj_list)
+        # Calculate the predicted interaction energy
+        e_static, e_ind, e_lj = self.calculate_predicted_interaction_energy(
+            atomic_numbers=atomic_numbers,
+            charges_mm=charges_mm,
+            xyz_qm=xyz_qm,
+            xyz_mm=xyz_mm,
+            solute_mask=solute_mask,
+            solvent_mask=solvent_mask,
+        )
 
         target = e_int_target
         values = e_static + e_ind + e_lj
