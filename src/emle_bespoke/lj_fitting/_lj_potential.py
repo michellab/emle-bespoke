@@ -225,6 +225,6 @@ class LennardJonesPotential(_torch.nn.Module):
         energy_matrix = 4 * epsilon * (r12 - r6)
 
         # Sum over all pairwise interactions
-        total_energy = energy_matrix.sum()
+        total_energy = _torch.sum(energy_matrix, dim=(1, 2))
 
         return total_energy
