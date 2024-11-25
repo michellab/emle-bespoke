@@ -219,8 +219,6 @@ class LennardJonesPotential(_torch.nn.Module):
         sigma = 0.5 * (solvent_sigma[:, None] + solute_sigma[None, :])
         epsilon = _torch.sqrt(solvent_epsilon[:, None] * solute_epsilon[None, :])
 
-        print(sigma.shape, epsilon.shape, distances.shape)
-
         # Lennard-Jones potential
         r6 = (sigma / distances) ** 6
         r12 = r6**2
