@@ -26,7 +26,8 @@ from ..utils import remove_constraints as _remove_constraints
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate reference data and train a bespoke EMLE model."
+        description="Generate reference data and train a bespoke EMLE model.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
 
     # Command-line arguments

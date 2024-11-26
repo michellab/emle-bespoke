@@ -84,14 +84,14 @@ def main():
     parser.add_argument(
         "--lr",
         type=float,
-        default=0.001,
+        default=0.0001,
         help="The learning rate for fitting LJ parameters.",
     )
 
     parser.add_argument(
         "--epochs",
         type=int,
-        default=100,
+        default=500,
         help="The number of epochs for fitting LJ parameters.",
     )
 
@@ -190,14 +190,14 @@ def main():
         topology_off=topology_off,
         forcefield=force_field,
         parameters_to_fit={
-            # "n7": ["sigma", "epsilon"],
-            # "n16": ["sigma", "epsilon"],
-            # "n14": ["sigma", "epsilon"],
+            "n7": ["sigma", "epsilon"],
+            "n16": ["sigma", "epsilon"],
+            "n14": ["sigma", "epsilon"],
             "n19": ["sigma", "epsilon"],
-            # "n3": ["sigma", "epsilon"],
             "n12": ["sigma", "epsilon"],
-            # "n-tip3p-O": ["sigma", "epsilon"],
-            # "n-tip3p-H": ["sigma", "epsilon"],
+            "n3": ["sigma", "epsilon"],
+            "n-tip3p-O": ["sigma", "epsilon"],
+            #"n-tip3p-H": ["sigma", "epsilon"],
         },
     )
 

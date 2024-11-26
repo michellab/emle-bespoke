@@ -13,7 +13,8 @@ from .._log import log_banner as _log_banner
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate reference data and train a bespoke EMLE model."
+        description="Generate reference data and train a bespoke EMLE model.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
 
     # Command-line arguments
@@ -99,6 +100,12 @@ def main():
         help="Calculate the MBIS static energy.",
     )
 
+    parser.add_argument(
+        "--skip-training",
+        action="store_true",
+        help="Skip training the model.",
+    )
+
     # Parse the arguments
     args = parser.parse_args()
 
@@ -140,29 +147,30 @@ def main():
         reference_data=args.reference_data, filename_prefix=args.filename_prefix
     )
 
-    # Train the bespoke EMLE model
-    emle_bespoke.train_model(
-        z=reference_data["z"],
-        xyz=reference_data["xyz_qm"],
-        s=reference_data["s"],
-        q_core=reference_data["q_core"],
-        q_val=reference_data["q_val"],
-        alpha=reference_data["alpha"],
-        train_mask=None,
-        model_filename=args.filename_prefix + "_bespoke.mat",
-        plot_data_filename=args.filename_prefix + "_bespoke_plot_data.mat",
-        sigma=args.sigma,
-        ivm_thr=args.ivm_thr,
-        epochs=args.epochs,
-        lr_qeq=args.lr_qeq,
-        lr_thole=args.lr_thole,
-        lr_sqrtk=args.lr_sqrtk,
-        print_every=args.print_every,
-    )
+    if not args.skip_training:
+        # Train the bespoke EMLE model
+        emle_bespoke.train_model(
+            z=reference_data["z"],
+            xyz=reference_data["xyz_qm"],
+            s=reference_data["s"],
+            q_core=reference_data["q_core"],
+            q_val=reference_data["q_val"],
+            alpha=reference_data["alpha"],
+            train_mask=None,
+            model_filename=args.filename_prefix + "_bespoke.mat",
+            plot_data_filename=args.filename_prefix + "_bespoke_plot_data.mat",
+            sigma=args.sigma,
+            ivm_thr=args.ivm_thr,
+            epochs=args.epochs,
+            lr_qeq=args.lr_qeq,
+            lr_thole=args.lr_thole,
+            lr_sqrtk=args.lr_sqrtk,
+            print_every=args.print_every,
+        )
 
     # Patch the bespoke EMLE model
     if args.patch:
-        emle_bespoke.patch_model(
+        patched_model, alpha_static, beta_induced = emle_bespoke.patch_model(
             e_static_target=reference_data["e_static"],
             e_ind_target=reference_data["e_ind"],
             atomic_numbers=reference_data["z"],
@@ -185,7 +193,18 @@ def main():
             q_val=reference_data["q_val"],
             s=reference_data["s"],
         )
+    
+    # Load mat
+    import scipy.io
 
+    a = scipy.io.loadmat("ligand_bespoke.mat")
+    a["a_QEq"] = patched_model._emle_base.a_QEq.cpu().detach().numpy()
+    a["ref_values_chi"] = patched_model._emle_base.ref_values_chi.cpu().detach().numpy()
+    a["a_Thole"] = patched_model._emle_base.a_Thole.cpu().detach().numpy()
+    a["k_Z"] = patched_model._emle_base.k_Z.cpu().detach().numpy()
+    a["ref_values_s"] = patched_model._emle_base.ref_values_s.cpu().detach().numpy()
+    scipy.io.savemat("ligand_bespoke_patched.mat", a)
+    
     msg = r"""
 ╔════════════════════════════════════════════════════════════╗
 ║             emle-bespoke-train terminated normally!        ║
