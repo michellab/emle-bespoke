@@ -360,7 +360,7 @@ class BespokeModelTrainer:
 
         # Create the patched model
         patched_model = EMLEPatched(
-            model=model,
+            model="ligand_bespoke.mat",
             alpha_static=self._alpha_static,
             beta_induced=self._beta_induced,
             device=self._device,
@@ -384,7 +384,8 @@ class BespokeModelTrainer:
         # Patch the model
         train_model(
             loss_class=PatchingLoss,
-            opt_param_names=["alpha_static", "beta_induced"],
+            # opt_param_names=["alpha_static", "beta_induced"],
+            opt_param_names=["a_QEq", "ref_values_chi"],
             lr=lr,
             epochs=epochs,
             print_every=print_every,
@@ -395,6 +396,26 @@ class BespokeModelTrainer:
             charges_mm=charges_mm,
             xyz_qm=xyz_qm,
             xyz_mm=xyz_mm,
+            fit_e_static=True,
+            fit_e_ind=False,
+        )
+
+        # Patch the model
+        train_model(
+            loss_class=PatchingLoss,
+            opt_param_names=["a_Thole", "k_Z"],
+            lr=lr,
+            epochs=epochs,
+            print_every=print_every,
+            emle_model=patched_model,
+            e_static_target=e_static_target,
+            e_ind_target=e_ind_target,
+            atomic_numbers=atomic_numbers,
+            charges_mm=charges_mm,
+            xyz_qm=xyz_qm,
+            xyz_mm=xyz_mm,
+            fit_e_static=False,
+            fit_e_ind=True,
         )
 
         self._alpha_static = patched_model.alpha_static.item()
@@ -481,6 +502,15 @@ class BespokeModelTrainer:
             device=self._device,
             dtype=self._dtype,
         )
+
+        # Convert reference data to numpy arrays
+        atomic_numbers = _torch.tensor(atomic_numbers)
+        charges_mm = _torch.tensor(charges_mm)
+        xyz_qm = _torch.tensor(xyz_qm)
+        xyz_mm = _torch.tensor(xyz_mm)
+        solute_mask = _torch.tensor(solute_mask)
+        solvent_mask = _torch.tensor(solvent_mask)
+        e_int_target = _torch.tensor(e_int_target)
 
         # Convert reference data to tensors
         atomic_numbers = pad_to_max(atomic_numbers).to(
