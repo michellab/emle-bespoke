@@ -14,7 +14,7 @@ from .._log import log_banner as _log_banner
 def main():
     parser = argparse.ArgumentParser(
         description="Generate reference data and train a bespoke EMLE model.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
     # Command-line arguments
@@ -193,7 +193,7 @@ def main():
             q_val=reference_data["q_val"],
             s=reference_data["s"],
         )
-    
+
     # Load mat
     import scipy.io
 
@@ -204,7 +204,7 @@ def main():
     a["k_Z"] = patched_model._emle_base.k_Z.cpu().detach().numpy()
     a["ref_values_s"] = patched_model._emle_base.ref_values_s.cpu().detach().numpy()
     scipy.io.savemat("ligand_bespoke_patched.mat", a)
-    
+
     msg = r"""
 ╔════════════════════════════════════════════════════════════╗
 ║             emle-bespoke-train terminated normally!        ║
