@@ -35,13 +35,107 @@ class EMLEForce(_torch.nn.Module):
         self.device = device
         self.dtype = dtype
 
+    @staticmethod
+    def _wrap_positions(
+        positions: _torch.Tensor, boxvectors: _torch.Tensor
+    ) -> _torch.Tensor:
+        """
+        Wrap the positions to the main box.
+
+        Parameters
+        ----------
+        positions: torch.Tensor(NATOMS, 3)
+            Atomic positions.
+        boxvectors: torch.Tensor(3, 3)
+            Box vectors.
+
+        Returns
+        -------
+        positions: torch.Tensor(NATOMS, 3)
+            Wrapped atomic positions.
+        """
+        for i in range(3):
+            positions = positions - _torch.outer(
+                _torch.floor(positions[:, i] / boxvectors[i, i]), boxvectors[i]
+            )
+        return positions
+
+    @staticmethod
+    def _center_molecule(
+        positions: _torch.Tensor,
+        boxvectors: _torch.Tensor,
+        molecule_mask: _torch.Tensor,
+    ) -> _torch.Tensor:
+        """
+        Center the molecule in the box (Lx/2, Ly/2, Lz/2).
+
+        Parameters
+        ----------
+        positions: torch.Tensor(NATOMS, 3)
+            Atomic positions.
+        boxvectors: torch.Tensor(3, 3)
+            Box vectors.
+        molecule_mask: torch.Tensor(NATOMS)
+            Molecule mask.
+
+        Returns
+        -------
+        positions: torch.Tensor(NATOMS, 3)
+            Centered atomic positions.
+        """
+        mol_positions = positions[molecule_mask]
+        com = mol_positions.mean(dim=0)
+        box_center = 0.5 * _torch.diag(boxvectors)
+        translation_vector = box_center - com
+        positions += translation_vector
+
+        # Wrap the positions to the main box
+        positions = EMLEForce._wrap_positions(positions, boxvectors)
+
+        return positions
+
+    @staticmethod
+    def _distance_to_molecule(
+        positions: _torch.Tensor,
+        boxvectors: _torch.Tensor,
+        molecule_mask: _torch.Tensor,
+    ) -> _torch.Tensor:
+        """
+        Calculate the R matrix for the molecule.
+
+        Parameters
+        ----------
+        positions: torch.Tensor(NATOMS, 3)
+            Atomic positions.
+        boxvectors: torch.Tensor(3, 3)
+            Box vectors.
+        molecule_mask: torch.Tensor(NATOMS)
+            Molecule mask.
+
+        Returns
+        -------
+        R: torch.Tensor(NATOMS, NATOMS)
+            Distance matrix.
+        """
+        ml_positions = positions[molecule_mask]
+        mm_positions = positions[~molecule_mask]
+        R = _torch.cdist(ml_positions, mm_positions)
+        return R
+
     def forward(self, positions, boxvectors: Optional[_torch.Tensor] = None):
         positions = positions.to(device=self.device, dtype=self.dtype)
-        positions *= self.lenght_scale
+
+        if boxvectors is not None:
+            boxvectors = boxvectors.to(device=self.device, dtype=self.dtype)
+            positions = self._center_molecule(positions, boxvectors, self.qm_mask)
+            R = self._distance_to_molecule(positions, boxvectors, self.qm_mask)
+            R_cutoff = _torch.any(R < self._cutoff, dim=0)
+        else:
+            R_cutoff = slice(None)
 
         # Get the positions of the QM and MM atoms
-        xyz_qm = positions[self.qm_mask]
-        xyz_mm = positions[self.mm_mask]
+        xyz_qm = positions[self.qm_mask] * self.lenght_scale
+        xyz_mm = positions[self.mm_mask][R_cutoff] * self.lenght_scale
 
         # Calculate the static and induced components of the interaction energy
         e_emle = self.model.forward(
