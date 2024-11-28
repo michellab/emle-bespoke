@@ -14,6 +14,25 @@ class EMLEForce(_torch.nn.Module):
     via the TorchForce class, enabling hybrid quantum mechanics/molecular mechanics (QM/MM)
     simulations with electrostatic embedding.
 
+    Parameters
+    ----------
+    model: EMLE model
+        The instance of the EMLE model.
+    atomic_numbers: torch.Tensor(N_ML_ATOMS)
+        Atomic numbers of the atoms in the system.
+    charges_mm: torch.Tensor(N_MM_ATOMS)
+        Charges of the atoms in the MM region.
+    qm_mask: torch.Tensor(N_ATOMS)
+        Mask to separate the QM and MM atoms.
+    cutoff: float
+        Cutoff distance for the QM/MM interaction in nanometers.
+    device: torch.device
+        Device to run the calculations.
+    dtype: torch.dtype
+        Data type for the calculations.
+
+    Notes
+    -----
     Usage:
         emle_module = torch.jit.script(EMLEForce(model, atomic_numbers, charges_mm, solvent_mask, solute_mask))
         emle_force = TorchForce(emle_module)
@@ -21,17 +40,18 @@ class EMLEForce(_torch.nn.Module):
     """
 
     def __init__(
-        self, model, atomic_numbers, charges_mm, qm_mask, mm_mask, device, dtype
+        self, model, atomic_numbers, charges_mm, qm_mask, cutoff, device, dtype
     ):
         super().__init__()
         self.model = model
         self.atomic_numbers = atomic_numbers
         self.charges_mm = charges_mm
         self.qm_mask = qm_mask
-        self.mm_mask = mm_mask
+        self.mm_mask = ~qm_mask
+        self.cutoff = cutoff
 
-        self.energy_scale = HARTREE_TO_KJ_MOL
-        self.lenght_scale = 1.0 / ANGSTROM_TO_NANOMETER
+        self._energy_scale = HARTREE_TO_KJ_MOL
+        self._lenght_scale = 1.0 / ANGSTROM_TO_NANOMETER
         self.device = device
         self.dtype = dtype
 
@@ -109,7 +129,7 @@ class EMLEForce(_torch.nn.Module):
             Atomic positions.
         boxvectors: torch.Tensor(3, 3)
             Box vectors.
-        molecule_mask: torch.Tensor(NATOMS)
+        molecule_mask: torch.Tensor(N_ATOMS)
             Molecule mask.
 
         Returns
@@ -134,13 +154,14 @@ class EMLEForce(_torch.nn.Module):
             R_cutoff = slice(None)
 
         # Get the positions of the QM and MM atoms
-        xyz_qm = positions[self.qm_mask] * self.lenght_scale
-        xyz_mm = positions[self.mm_mask][R_cutoff] * self.lenght_scale
+        xyz_qm = positions[self.qm_mask] * self._lenght_scale
+        xyz_mm = positions[self.mm_mask][R_cutoff] * self._lenght_scale
+
+        # Get the charges of the MM atoms
+        charges_mm = self.charges_mm[self.mm_mask][R_cutoff]
 
         # Calculate the static and induced components of the interaction energy
-        e_emle = self.model.forward(
-            self.atomic_numbers, self.charges_mm, xyz_qm, xyz_mm
-        )
-        e_final = (e_emle * self.energy_scale).sum()
+        e_emle = self.model.forward(self.atomic_numbers, charges_mm, xyz_qm, xyz_mm)
+        e_final = (e_emle * self._energy_scale).sum()
 
         return e_final
