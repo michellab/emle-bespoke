@@ -194,7 +194,9 @@ def create_mixed_system(
     return system, context, integrator
 
 
-def add_emle_force(emle_model, qm_region, system, context, topology, *args, **kwargs):
+def add_emle_force(
+    emle_model, qm_region, system, context, topology, cutoff=None, *args, **kwargs
+):
     import torch as _torch
     from emle.models import EMLE as _EMLE
     from openmmtorch import TorchForce as _TorchForce
@@ -213,13 +215,14 @@ def add_emle_force(emle_model, qm_region, system, context, topology, *args, **kw
         model = _EMLE(model=emle_model, device=device, dtype=dtype, *args, **kwargs)
 
         # Create the QM and MM masks
-        qm_mask = _torch.zeros(topology.getNumAtoms(), dtype=_torch.bool)
+        qm_mask = _torch.zeros(topology.getNumAtoms(), dtype=_torch.bool, device=device)
         qm_mask[qm_region] = True
-        mm_mask = ~qm_mask
 
         # Get the atomic numbers
         atomic_numbers = _torch.tensor(
-            [atom.element.atomic_number for atom in topology.atoms()]
+            [atom.element.atomic_number for atom in topology.atoms()],
+            dtype=_torch.int64,
+            device=device,
         )[qm_mask]
 
         # Charges
@@ -234,16 +237,15 @@ def add_emle_force(emle_model, qm_region, system, context, topology, *args, **kw
                 non_bonded_force.getParticleParameters(i)[0]._value
                 for i in range(non_bonded_force.getNumParticles())
             ]
-        )
-        charges_mm = charges[mm_mask]
+        ).to(device=device, dtype=dtype)
 
         # Create the EMLE force
         emle_force = _EMLEForce(
             model=model,
-            atomic_numbers=atomic_numbers.to(device=device, dtype=_torch.int64),
-            charges_mm=charges_mm.to(device=device, dtype=_torch.float64),
-            qm_mask=qm_mask.to(device=device, dtype=_torch.bool),
-            mm_mask=mm_mask.to(device=device, dtype=_torch.bool),
+            atomic_numbers=atomic_numbers,
+            charges=charges,
+            qm_mask=qm_mask,
+            cutoff=cutoff,
             device=device,
             dtype=dtype,
         )
@@ -251,6 +253,7 @@ def add_emle_force(emle_model, qm_region, system, context, topology, *args, **kw
         # Add the EMLE force to the system
         emle_module = _torch.jit.script(emle_force)
         emle_force = _TorchForce(emle_module)
+        emle_force.setUsesPeriodicBoundaryConditions(True)
         system.addForce(emle_force)
 
         # In order to ensure that OpenMM doesn’t perform mechanical embedding,

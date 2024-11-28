@@ -20,8 +20,8 @@ class EMLEForce(_torch.nn.Module):
         The instance of the EMLE model.
     atomic_numbers: torch.Tensor(N_ML_ATOMS)
         Atomic numbers of the atoms in the system.
-    charges_mm: torch.Tensor(N_MM_ATOMS)
-        Charges of the atoms in the MM region.
+    charges: torch.Tensor(N_ATOMS)
+        Charges of all the atoms in the system.
     qm_mask: torch.Tensor(N_ATOMS)
         Mask to separate the QM and MM atoms.
     cutoff: float or None
@@ -34,18 +34,16 @@ class EMLEForce(_torch.nn.Module):
     Notes
     -----
     Usage:
-        emle_module = torch.jit.script(EMLEForce(model, atomic_numbers, charges_mm, solvent_mask, solute_mask))
+        emle_module = torch.jit.script(EMLEForce(model, atomic_numbers, charges, solvent_mask, solute_mask))
         emle_force = TorchForce(emle_module)
         system.addForce(emle_force)
     """
 
-    def __init__(
-        self, model, atomic_numbers, charges_mm, qm_mask, cutoff, device, dtype
-    ):
+    def __init__(self, model, atomic_numbers, charges, qm_mask, cutoff, device, dtype):
         super().__init__()
         self.model = model
         self.atomic_numbers = atomic_numbers
-        self.charges_mm = charges_mm
+        self.charges = charges
         self.qm_mask = qm_mask
         self.mm_mask = ~qm_mask
         self.cutoff = cutoff
@@ -117,7 +115,6 @@ class EMLEForce(_torch.nn.Module):
     @staticmethod
     def _distance_to_molecule(
         positions: _torch.Tensor,
-        boxvectors: _torch.Tensor,
         molecule_mask: _torch.Tensor,
     ) -> _torch.Tensor:
         """
@@ -127,8 +124,6 @@ class EMLEForce(_torch.nn.Module):
         ----------
         positions: torch.Tensor(NATOMS, 3)
             Atomic positions.
-        boxvectors: torch.Tensor(3, 3)
-            Box vectors.
         molecule_mask: torch.Tensor(N_ATOMS)
             Molecule mask.
 
@@ -145,20 +140,23 @@ class EMLEForce(_torch.nn.Module):
     def forward(self, positions, boxvectors: Optional[_torch.Tensor] = None):
         positions = positions.to(device=self.device, dtype=self.dtype)
 
-        if boxvectors is not None or self._cutoff is not None:
-            boxvectors = boxvectors.to(device=self.device, dtype=self.dtype)
+        # Center the molecule in the box and wrap the positions
+        if boxvectors is not None:
             positions = self._center_molecule(positions, boxvectors, self.qm_mask)
-            R = self._distance_to_molecule(positions, boxvectors, self.qm_mask)
-            R_cutoff = _torch.any(R < self._cutoff, dim=0)
+
+        # Calculate the distance matrix and apply the cutoff
+        if self.cutoff is not None:
+            R = self._distance_to_molecule(positions, self.qm_mask)
+            R_cutoff = _torch.any(R < self.cutoff, dim=0)
         else:
-            R_cutoff = slice(None)
+            R_cutoff = self.mm_mask[self.mm_mask]
 
         # Get the positions of the QM and MM atoms
         xyz_qm = positions[self.qm_mask] * self._lenght_scale
         xyz_mm = positions[self.mm_mask][R_cutoff] * self._lenght_scale
 
         # Get the charges of the MM atoms
-        charges_mm = self.charges_mm[self.mm_mask][R_cutoff]
+        charges_mm = self.charges[self.mm_mask][R_cutoff]
 
         # Calculate the static and induced components of the interaction energy
         e_emle = self.model.forward(self.atomic_numbers, charges_mm, xyz_qm, xyz_mm)
