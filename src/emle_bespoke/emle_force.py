@@ -24,8 +24,8 @@ class EMLEForce(_torch.nn.Module):
         Charges of the atoms in the MM region.
     qm_mask: torch.Tensor(N_ATOMS)
         Mask to separate the QM and MM atoms.
-    cutoff: float
-        Cutoff distance for the QM/MM interaction in nanometers.
+    cutoff: float or None
+        Cutoff distance for the QM/MM interaction in nanometers. If None, the cutoff is disabled.
     device: torch.device
         Device to run the calculations.
     dtype: torch.dtype
@@ -145,7 +145,7 @@ class EMLEForce(_torch.nn.Module):
     def forward(self, positions, boxvectors: Optional[_torch.Tensor] = None):
         positions = positions.to(device=self.device, dtype=self.dtype)
 
-        if boxvectors is not None:
+        if boxvectors is not None or self._cutoff is not None:
             boxvectors = boxvectors.to(device=self.device, dtype=self.dtype)
             positions = self._center_molecule(positions, boxvectors, self.qm_mask)
             R = self._distance_to_molecule(positions, boxvectors, self.qm_mask)
