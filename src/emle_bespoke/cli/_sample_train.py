@@ -11,13 +11,13 @@ from openff.interchange import Interchange as _Interchange
 # OpenFF imports
 from openff.toolkit import ForceField as _ForceField
 
-from .._log import log_banner as _log_banner
-
 # Imports from the emle-bespoke package
+from .._log import log_banner as _log_banner
 from ..bespoke import BespokeModelTrainer as _BespokeModelTrainer
 from ..calculators import HortonCalculator as _HortonCalculator
 from ..calculators import ORCACalculator as _ORCACalculator
 from ..samplers._md import MDSampler as _MDSampler
+from ..utils import add_emle_force as _add_emle_force
 from ..utils import create_mixed_system as _create_mixed_system
 from ..utils import create_simulation as _create_simulation
 from ..utils import create_simulation_box_topology as _create_simulation_box_topology
@@ -32,19 +32,19 @@ def main():
 
     # Command-line arguments
     parser.add_argument(
-        "--n_solute", type=int, default=1, help="Number of ligands in the system."
+        "--n-solute", type=int, default=1, help="Number of ligands in the system."
     )
     parser.add_argument(
-        "--n_solvent",
+        "--n-solvent",
         type=int,
         default=1000,
         help="Number of water molecules in the system.",
     )
     parser.add_argument(
-        "--n_samples", type=int, default=100, help="Number of samples to generate."
+        "--n-samples", type=int, default=100, help="Number of samples to generate."
     )
     parser.add_argument(
-        "--n_steps", type=int, default=1000, help="Number of simulation steps to run."
+        "--n-steps", type=int, default=1000, help="Number of simulation steps to run."
     )
 
     parser.add_argument(
@@ -55,7 +55,7 @@ def main():
     )
 
     parser.add_argument(
-        "--n_equilibration",
+        "--n-equilibration",
         type=int,
         default=1000,
         help="Number of equilibration steps to run.",
@@ -92,16 +92,23 @@ def main():
         help="Simulation timestep in femtoseconds.",
     )
     parser.add_argument(
-        "--friction_coefficient",
+        "--friction-coefficient",
         type=float,
         default=1.0,
         help="Langevin friction coefficient (ps^-1).",
     )
     parser.add_argument(
-        "--ml_model",
+        "--ml-model",
         type=str,
         default=None,
         help="The machine learning model to use for the solute.",
+    )
+
+    parser.add_argument(
+        "--emle-model",
+        type=str,
+        default=None,
+        help="The EMLE model to use for the solute.",
     )
 
     # Parse the arguments
@@ -168,6 +175,11 @@ def main():
     # Create mixed system
     system, context, integrator = _create_mixed_system(
         args.ml_model, qm_region, simulation
+    )
+
+    # Add the EMLE force
+    system, context = _add_emle_force(
+        args.emle_model, qm_region, system, context, topology
     )
 
     if args.n_equilibration:

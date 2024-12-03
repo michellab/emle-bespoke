@@ -31,7 +31,7 @@ class InteractionEnergyLoss(_BaseLoss):
         emle_model,
         lj_potential,
         loss=WeightedMSELoss(),
-        weighting_method="boltzmann",
+        weighting_method="uniform",
     ):
         super().__init__()
 
@@ -85,13 +85,14 @@ class InteractionEnergyLoss(_BaseLoss):
         return weights / weights.sum()
 
     def calculate_predicted_interaction_energy(
-        self, atomic_numbers, charges_mm, xyz_qm, xyz_mm, solute_mask, solvent_mask
+        self, atomic_numbers, charges_mm, xyz_qm, xyz_mm, xyz, solute_mask, solvent_mask
     ):
         if atomic_numbers.ndim == 1:
             atomic_numbers = atomic_numbers.unsqueeze(0)
             charges_mm = charges_mm.unsqueeze(0)
             xyz_qm = xyz_qm.unsqueeze(0)
             xyz_mm = xyz_mm.unsqueeze(0)
+            xyz = xyz.unsqueeze(0)
             solvent_mask = solvent_mask.unsqueeze(0)
             solute_mask = solute_mask.unsqueeze(0)
 
@@ -107,7 +108,7 @@ class InteractionEnergyLoss(_BaseLoss):
 
         # Calculate Lennard-Jones potential energy
         e_lj = self._lj_potential.forward(
-            _torch.cat([xyz_qm, xyz_mm], dim=1),
+            xyz,
             solute_mask=solute_mask,
             solvent_mask=solvent_mask,
         )
@@ -121,6 +122,7 @@ class InteractionEnergyLoss(_BaseLoss):
         charges_mm,
         xyz_qm,
         xyz_mm,
+        xyz,
         solute_mask,
         solvent_mask,
         l2_reg=1.0,
@@ -140,6 +142,8 @@ class InteractionEnergyLoss(_BaseLoss):
             QM atom positions in nanometers.
         xyz_mm: torch.Tensor (NBATCH, N_MM_ATOMS, 3)
             MM atom positions in nanometers.
+        solute_mask: torch.Tensor (NBATCH, N_MM_ATOMS)
+            Mask for the solute atoms.
         solute_mask: torch.Tensor (N_MM_ATOMS,)
             Mask for the solute atoms.
         solvent_mask: torch.Tensor (N_MM_ATOMS,)
@@ -153,6 +157,7 @@ class InteractionEnergyLoss(_BaseLoss):
             charges_mm=charges_mm,
             xyz_qm=xyz_qm,
             xyz_mm=xyz_mm,
+            xyz=xyz,
             solute_mask=solute_mask,
             solvent_mask=solvent_mask,
         )
@@ -171,23 +176,28 @@ class InteractionEnergyLoss(_BaseLoss):
             raise NotImplementedError(f"Loss function {self._loss} not implemented")
 
         if l2_reg is not None:
-            epsilon_std = self._lj_potential._epsilon_tensor_initial.std()
-            sigma_std = self._lj_potential._sigma_tensor_initial.std()
+            epsilon_std = (
+                self._lj_potential._epsilon_init.std()
+                if self._lj_potential._epsilon_init.shape[0] > 1
+                else 1.0
+            )
+            sigma_std = (
+                self._lj_potential._sigma_init.std()
+                if self._lj_potential._sigma_init.shape[0] > 1
+                else 1.0
+            )
+            target_std = target.std() if target.shape[0] > 1 else 1.0
 
             epsilon_diff = (
-                self._lj_potential._epsilon_tensor
-                - self._lj_potential._epsilon_tensor_initial
+                self._lj_potential._epsilon - self._lj_potential._epsilon_init
             )
             epsilon_diff = epsilon_diff / epsilon_std
-            sigma_diff = (
-                self._lj_potential._sigma_tensor
-                - self._lj_potential._sigma_tensor_initial
-            )
+            sigma_diff = self._lj_potential._sigma - self._lj_potential._sigma_init
             sigma_diff = sigma_diff / sigma_std
 
             reg = l2_reg * (epsilon_diff.square().sum() + sigma_diff.square().sum())
-            loss = loss / target.std() + reg
 
+            loss = loss / target_std + reg
         return (
             loss,
             self._get_rmse(values, target),

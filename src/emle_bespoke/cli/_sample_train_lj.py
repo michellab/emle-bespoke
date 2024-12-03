@@ -32,10 +32,10 @@ def main():
     )
 
     parser.add_argument(
-        "--n_samples", type=int, default=100, help="Number of samples to generate."
+        "--n-samples", type=int, default=100, help="Number of samples to generate."
     )
     parser.add_argument(
-        "--n_steps", type=int, default=1000, help="Number of simulation steps to run."
+        "--n-steps", type=int, default=1000, help="Number of simulation steps to run."
     )
 
     parser.add_argument(
@@ -68,14 +68,14 @@ def main():
     )
 
     parser.add_argument(
-        "--ml_model",
+        "--ml-model",
         type=str,
         default=None,
         help="The machine learning model to use for the solute.",
     )
 
     parser.add_argument(
-        "--emle_model",
+        "--emle-model",
         type=str,
         default="default",
         help="The EMLE model to use for the solute.",
@@ -209,7 +209,9 @@ def main():
     emle_bespoke.sample_dimer_curves()
     """
     # ref_sampler.reference_data.read("/home/joaomorado/mnsol_sampling/run_fixed_test/dimers/ligand_ref_data.pkl")
-    ref_sampler.reference_data.read("/home/joaomorado/test/a/water-methanol.pkl")
+    ref_sampler.reference_data.read(
+        "/home/joaomorado/mnsol_sampling/LJ/water-benzene.pkl"
+    )
     # ref_sampler.reference_data.read("/home/joaomorado/test/a/solvator/data_solvator.pkl")
 
     ni = 0

@@ -365,6 +365,7 @@ class BespokeModelTrainer:
             beta_induced=self._beta_induced,
             device=self._device,
             dtype=self._dtype,
+            alpha_mode="reference",
         )
 
         # Convert numpy arrays to tensors
@@ -380,7 +381,7 @@ class BespokeModelTrainer:
         e_ind_target = _torch.tensor(e_ind_target).to(
             device=self._device, dtype=self._dtype
         )
-
+        """
         # Patch the model
         train_model(
             loss_class=PatchingLoss,
@@ -399,11 +400,32 @@ class BespokeModelTrainer:
             fit_e_static=True,
             fit_e_ind=False,
         )
-
+        """
         # Patch the model
         train_model(
             loss_class=PatchingLoss,
-            opt_param_names=["a_Thole", "k_Z"],
+            opt_param_names=["a_QEq", "ref_values_chi"],
+            # opt_param_names=["_q_core", "a_QEq", "ref_values_chi", "ref_values_sqrtk"],
+            lr=lr,
+            epochs=epochs,
+            print_every=print_every,
+            emle_model=patched_model,
+            e_static_target=e_static_target,
+            e_ind_target=e_ind_target,
+            atomic_numbers=atomic_numbers,
+            charges_mm=charges_mm,
+            xyz_qm=xyz_qm,
+            xyz_mm=xyz_mm,
+            fit_e_static=True,
+            fit_e_ind=False,
+        )
+        PatchingLoss._update_s_gpr(patched_model._emle_base)
+        PatchingLoss._update_chi_gpr(patched_model._emle_base)
+
+        train_model(
+            loss_class=PatchingLoss,
+            opt_param_names=["a_Thole", "k_Z", "ref_values_sqrtk"],
+            # opt_param_names=["_q_core", "a_QEq", "ref_values_chi", "ref_values_sqrtk"],
             lr=lr,
             epochs=epochs,
             print_every=print_every,
@@ -417,6 +439,10 @@ class BespokeModelTrainer:
             fit_e_static=False,
             fit_e_ind=True,
         )
+
+        PatchingLoss._update_s_gpr(patched_model._emle_base)
+        PatchingLoss._update_chi_gpr(patched_model._emle_base)
+        PatchingLoss._update_sqrtk_gpr(patched_model._emle_base)
 
         self._alpha_static = patched_model.alpha_static.item()
         self._beta_induced = patched_model.beta_induced.item()
@@ -473,6 +499,7 @@ class BespokeModelTrainer:
         charges_mm,
         xyz_qm,
         xyz_mm,
+        xyz,
         solute_mask,
         solvent_mask,
         lj_potential,
@@ -508,6 +535,7 @@ class BespokeModelTrainer:
         charges_mm = _torch.tensor(charges_mm)
         xyz_qm = _torch.tensor(xyz_qm)
         xyz_mm = _torch.tensor(xyz_mm)
+        xyz = _torch.tensor(xyz)
         solute_mask = _torch.tensor(solute_mask)
         solvent_mask = _torch.tensor(solvent_mask)
         e_int_target = _torch.tensor(e_int_target)
@@ -519,6 +547,7 @@ class BespokeModelTrainer:
         charges_mm = pad_to_max(charges_mm).to(device=self._device, dtype=self._dtype)
         xyz_qm = pad_to_max(xyz_qm).to(device=self._device, dtype=self._dtype)
         xyz_mm = pad_to_max(xyz_mm).to(device=self._device, dtype=self._dtype)
+        xyz = pad_to_max(xyz).to(device=self._device, dtype=self._dtype)
         solute_mask = pad_to_max(solute_mask).to(device=self._device, dtype=_torch.bool)
         solvent_mask = pad_to_max(solvent_mask).to(
             device=self._device, dtype=_torch.bool
@@ -526,7 +555,7 @@ class BespokeModelTrainer:
         e_int_target = pad_to_max(e_int_target).to(
             device=self._device, dtype=self._dtype
         )
-
+        """
         e_int_loss = _InteractionEnergyLoss(
             emle_model=patched_model,
             lj_potential=lj_potential,
@@ -550,7 +579,7 @@ class BespokeModelTrainer:
             e_int = e_static + e_ind + e_lj
             e_int_predicted.append(e_int.item())
         plot_data["e_int_predicted"] = _np.array(e_int_predicted)
-
+        """
         # Fit the LJ parameters
         loss_class_kwargs = {"lj_potential": lj_potential}
         loss_model = train_model(
@@ -566,10 +595,11 @@ class BespokeModelTrainer:
             charges_mm=charges_mm,
             xyz_qm=xyz_qm,
             xyz_mm=xyz_mm,
+            xyz=xyz,
             solute_mask=solute_mask,
             solvent_mask=solvent_mask,
         )
-
+        """
         # Store the fitted data for plotting
         e_int_fitted = []
         e_static_fitted = []
@@ -598,7 +628,8 @@ class BespokeModelTrainer:
         # Write the plot data to a file
         plot_data_filename = f"{self._filename_prefix}_plot_data.mat"
         _write_dict_to_file(plot_data, plot_data_filename)
-
+        """
+        """
         _logger.info("Fitted LJ parameters:")
         # Get all Parameters
         for name, param in loss_model.named_parameters():
@@ -606,8 +637,8 @@ class BespokeModelTrainer:
                 _logger.info(
                     f"Optimal {name.split('.', 1)[-1][1:]}: {param.item():.8f}"
                 )
-
-        lj_potential.print_lj_parameters()
+        """
+        lj_potential.print_lj_parameters(lj_potential._lj_params)
         _logger.info("Finished fitting LJ parameters.")
 
         return

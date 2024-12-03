@@ -36,6 +36,7 @@ class EMLEForce(_torch.nn.Module):
     Usage:
         emle_module = torch.jit.script(EMLEForce(model, atomic_numbers, charges, solvent_mask, solute_mask))
         emle_force = TorchForce(emle_module)
+        emle_force.setUsesPeriodicBoundaryConditions(True)
         system.addForce(emle_force)
     """
 
@@ -105,7 +106,7 @@ class EMLEForce(_torch.nn.Module):
         com = mol_positions.mean(dim=0)
         box_center = 0.5 * _torch.diag(boxvectors)
         translation_vector = box_center - com
-        positions += translation_vector
+        positions = positions + translation_vector
 
         # Wrap the positions to the main box
         positions = EMLEForce._wrap_positions(positions, boxvectors)
@@ -147,7 +148,7 @@ class EMLEForce(_torch.nn.Module):
         # Calculate the distance matrix and apply the cutoff
         if self.cutoff is not None:
             R = self._distance_to_molecule(positions, self.qm_mask)
-            R_cutoff = _torch.any(R < self.cutoff, dim=0)
+            R_cutoff = _torch.any(R <= self.cutoff, dim=0)
         else:
             R_cutoff = self.mm_mask[self.mm_mask]
 

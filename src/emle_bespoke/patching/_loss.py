@@ -30,6 +30,7 @@ class PatchingLoss(_BaseLoss):
         xyz_mm,
         fit_e_static=True,
         fit_e_ind=True,
+        n_batches=8,
     ):
         """
         Forward pass.
@@ -53,10 +54,39 @@ class PatchingLoss(_BaseLoss):
         fit_e_ind: bool
             Whether to fit the induced component.
         """
+
+        # Update the EMLE model with the current parameters
+        self._update_s_gpr(self._emle_model._emle_base)
+        self._update_chi_gpr(self._emle_model._emle_base)
+        self._update_sqrtk_gpr(self._emle_model._emle_base)
+
         # Calculate EMLE predictions for static and induced components in a batched manner
-        e_static, e_ind = self._emle_model(atomic_numbers, charges_mm, xyz_qm, xyz_mm)
-        e_static = e_static * HARTREE_TO_KJ_MOL
-        e_ind = e_ind * HARTREE_TO_KJ_MOL
+        n_samples = atomic_numbers.shape[0]
+        batch_size = n_samples // n_batches
+        e_static_all = []
+        e_ind_all = []
+
+        for i in range(n_batches):
+            batch_start = int(i * batch_size)
+            batch_end = (
+                int((i + 1) * batch_size) if i < n_batches - 1 else int(n_samples)
+            )
+
+            e_static, e_ind = self._emle_model(
+                atomic_numbers[batch_start:batch_end],
+                charges_mm[batch_start:batch_end],
+                xyz_qm[batch_start:batch_end],
+                xyz_mm[batch_start:batch_end],
+            )
+
+            e_static = e_static * HARTREE_TO_KJ_MOL
+            e_ind = e_ind * HARTREE_TO_KJ_MOL
+
+            e_static_all.append(e_static)
+            e_ind_all.append(e_ind)
+
+        e_static = _torch.cat(e_static_all, dim=0)
+        e_ind = _torch.cat(e_ind_all, dim=0)
 
         target = (e_static_target if fit_e_static else 0) + (
             e_ind_target if fit_e_ind else 0
@@ -70,4 +100,28 @@ class PatchingLoss(_BaseLoss):
             self._loss(values, target),
             self._get_rmse(values, target),
             self._get_max_error(values, target),
+        )
+
+    @staticmethod
+    def _update_sqrtk_gpr(emle_base):
+        emle_base._ref_mean_sqrtk, emle_base._c_sqrtk = emle_base._get_c(
+            emle_base._n_ref,
+            emle_base.ref_values_sqrtk,
+            emle_base._Kinv,
+        )
+
+    @staticmethod
+    def _update_chi_gpr(emle_base):
+        emle_base._ref_mean_chi, emle_base._c_chi = emle_base._get_c(
+            emle_base._n_ref,
+            emle_base.ref_values_chi,
+            emle_base._Kinv,
+        )
+
+    @staticmethod
+    def _update_s_gpr(emle_base):
+        emle_base._ref_mean_s, emle_base._c_s = emle_base._get_c(
+            emle_base._n_ref,
+            emle_base.ref_values_s,
+            emle_base._Kinv,
         )

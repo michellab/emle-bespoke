@@ -41,9 +41,9 @@ def create_dimer_topology(
     solute_smiles: str, solvent_smiles: str, n_solvent: int = 1
 ) -> _Topology:
     try:
-        _logger.info("Creating OpenFF dimer topology.")
-        _logger.info(f"Solute SMILES: {solute_smiles}")
-        _logger.info(f"Solvent SMILES: {solvent_smiles}")
+        # _logger.info("Creating OpenFF dimer topology.")
+        # _logger.info(f"Solute SMILES: {solute_smiles}")
+        # _logger.info(f"Solvent SMILES: {solvent_smiles}")
 
         solute = create_molecule(solute_smiles)
         for atom in solute.atoms:
@@ -209,7 +209,7 @@ def add_emle_force(
             emle_model = None
 
         device = _torch.device("cuda" if _torch.cuda.is_available() else "cpu")
-        dtype = _torch.float64
+        dtype = _torch.float32
 
         # Create the EMLE model
         model = _EMLE(model=emle_model, device=device, dtype=dtype, *args, **kwargs)

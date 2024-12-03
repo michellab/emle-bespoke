@@ -199,10 +199,13 @@ def main():
 
     a = scipy.io.loadmat("ligand_bespoke.mat")
     a["a_QEq"] = patched_model._emle_base.a_QEq.cpu().detach().numpy()
-    a["ref_values_chi"] = patched_model._emle_base.ref_values_chi.cpu().detach().numpy()
+    a["chi_ref"] = patched_model._emle_base.ref_values_chi.cpu().detach().numpy()
     a["a_Thole"] = patched_model._emle_base.a_Thole.cpu().detach().numpy()
     a["k_Z"] = patched_model._emle_base.k_Z.cpu().detach().numpy()
-    a["ref_values_s"] = patched_model._emle_base.ref_values_s.cpu().detach().numpy()
+    a["s_ref"] = patched_model._emle_base.ref_values_s.cpu().detach().numpy()
+    a["q_core"] = patched_model._emle_base._q_core.cpu().detach().numpy()
+    a["sqrtk_ref"] = patched_model._emle_base.ref_values_sqrtk.cpu().detach().numpy()
+
     scipy.io.savemat("ligand_bespoke_patched.mat", a)
 
     msg = r"""
