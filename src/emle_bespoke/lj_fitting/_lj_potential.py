@@ -1,4 +1,3 @@
-"""Lennard-Jones potential class."""
 import openmm.unit as _unit
 import torch as _torch
 from loguru import logger as _logger
@@ -6,43 +5,25 @@ from loguru import logger as _logger
 
 class LennardJonesPotential(_torch.nn.Module):
     """
-    Lennard-Jones potential energy calculation for a set of particles.
+    Lennard-Jones potential energy calculation.
 
     Parameters
     ----------
-    topology_off : openff.toolkit.topology.Topology
+    topology_off : list of openff.toolkit.topology.Topology or openff.toolkit.topology.Molecule
         The OpenFF Topology object.
     forcefield : openff.toolkit.typing.engines.smirnoff.ForceField
         The OpenFF ForceField object.
-    parameters_to_fit : dict
-        A dictionary of the parameters to fit.
-        The keys are the atom types and the values are lists of the parameters to fit.
-        For example, to fit the sigma and epsilon parameters for the "n-tip3p-O" atom type:
+    parameters_to_fit : dict of dict
+        A dictionary of atom types and parameters to fit.
+        The keys are atom types and the values are dictionaries with the parameters to fit.
+        For example:
         {
-            "n-tip3p-O": ["sigma", "epsilon"],
+            "n-tip3p-O": {"sigma": True, "epsilon": True}
         }
     device : torch.device, optional
         The device to use for the calculation.
     dtype : torch.dtype, optional
         The data type to use for the calculation.
-
-    Attributes
-    ----------
-    _forcefield : openff.toolkit.typing.engines.smirnoff.ForceField
-        The OpenFF ForceField object.
-    _topology_off : openff.toolkit.topology.Topology
-        The OpenFF Topology object.
-    _parameters_to_fit : dict
-        A dictionary of the parameters to fit.
-    _lj_params : dict
-        A dictionary of the Lennard-Jones parameters.
-        The keys are the atom types and the values are dictionaries with the "sigma" and "epsilon" parameters.
-    _atoms_types : list
-        A list of the atom types.
-    _sigma : list
-        A list of the sigma parameters.
-    _epsilon : list
-        A list of the epsilon parameters.
     """
 
     def __init__(
@@ -50,125 +31,198 @@ class LennardJonesPotential(_torch.nn.Module):
     ):
         super().__init__()
         self._forcefield = forcefield
-        self._topology_off = topology_off
+        self._topology_off = (
+            topology_off if isinstance(topology_off, list) else [topology_off]
+        )
         self._parameters_to_fit = parameters_to_fit
 
-        # Initialize the Lennard-Jones parameters
-        self._lj_params = {}
-        self._atoms_types = []
-
-        # Get the Lennard-Jones parameters and dynamically register them
-        self._get_lennard_jones_parameters()
-
         # Initialize device and dtype
-        self._device = (
-            device or _torch.device("cuda")
+        self._device = device or (
+            _torch.device("cuda")
             if _torch.cuda.is_available()
             else _torch.device("cpu")
         )
         self._dtype = dtype or _torch.float64
 
-        # Create the initial sigma and epsilon tensors
-        # This is need if regularization is used
-        self._sigma_tensor_initial = _torch.stack(
-            [self._lj_params[atom]["sigma"] for atom in self._atoms_types]
-        ).to(self._device, self._dtype)
+        # Precompute LJ parameters and atom type mapping
+        (
+            self._atom_type_to_index,
+            self._sigma,
+            self._epsilon,
+            self._atom_type_ids,
+            self._lj_params,
+        ) = self._build_lj_param_lookup()
 
-        self._epsilon_tensor_initial = _torch.stack(
-            [self._lj_params[atom]["epsilon"] for atom in self._atoms_types]
-        ).to(self._device, self._dtype)
+        self._num_atom_types = len(self._atom_type_to_index)
 
-    def _get_lennard_jones_parameters(self):
-        _logger.debug("Getting Lennard-Jones parameters.")
-        ff_params = self._forcefield.label_molecules(self._topology_off)
+        # Store initial values for sigma and epsilon without requiring gradients
+        self._sigma_init = self._sigma.clone().detach()
+        self._epsilon_init = self._epsilon.clone().detach()
 
-        # Use nn.ParameterDict for dynamic registration
-        self._sigma = _torch.nn.ParameterDict()
-        self._epsilon = _torch.nn.ParameterDict()
+        # Create trainable embedding layers for sigma and epsilon
+        self._sigma_embedding = _torch.nn.Embedding.from_pretrained(
+            self._sigma, freeze=False
+        )
+        self._epsilon_embedding = _torch.nn.Embedding.from_pretrained(
+            self._epsilon, freeze=False
+        )
 
-        for mol in ff_params:
-            for _, val in mol["vdW"].items():
-                if val.id not in self._lj_params:
-                    # Create tensors for sigma and epsilon
-                    sigma = _torch.tensor(
-                        val.sigma.to_openmm().in_units_of(_unit.nanometers)._value,
-                        dtype=_torch.float64,
-                    )
-                    epsilon = _torch.tensor(
-                        val.epsilon.to_openmm()
-                        .in_units_of(_unit.kilojoule_per_mole)
-                        ._value,
-                        dtype=_torch.float64,
-                    )
+        # Create frozen embedding layers for sigma and epsilon
+        self._sigma_embedding_frozen = _torch.nn.Embedding.from_pretrained(
+            self._sigma_init, freeze=True
+        )
+        self._epsilon_embedding_frozen = _torch.nn.Embedding.from_pretrained(
+            self._epsilon_init, freeze=True
+        )
 
-                    # Dynamically register trainable parameters
-                    if val.id in self._parameters_to_fit:
-                        if "sigma" in self._parameters_to_fit[val.id]:
-                            sigma = _torch.nn.Parameter(sigma)
-                            self._sigma[val.id] = sigma
-                        if "epsilon" in self._parameters_to_fit[val.id]:
-                            epsilon = _torch.nn.Parameter(epsilon)
-                            self._epsilon[val.id] = epsilon
+        # Create embedding masks
+        (
+            self._sigma_embedding_mask,
+            self._epsilon_embedding_mask,
+        ) = self._build_embedding_masks()
 
-                    # Store in _lj_params dictionary for reference
-                    self._lj_params[val.id] = {"sigma": sigma, "epsilon": epsilon}
+        self._sigma_mask = self._sigma_embedding_mask(self._atom_type_ids).squeeze(-1)
+        self._epsilon_mask = self._epsilon_embedding_mask(self._atom_type_ids).squeeze(
+            -1
+        )
 
-                self._atoms_types.append(val.id)
-
-        # Pretty print the Lennard-Jones parameters
-        self.print_lj_parameters()
-
-        return self._lj_params, self._atoms_types
-
-    def print_lj_parameters(self):
+    @staticmethod
+    def print_lj_parameters(lj_params):
         """Print the Lennard-Jones parameters."""
         _logger.debug("")
         _logger.debug("Lennard-Jones Parameters")
         _logger.debug("-" * 40)
-        _logger.debug(f"{'Atom Type':16s} | {'σ':>8s} | {'ε':>8s}")
+        _logger.debug(f"{'Atom Type':16s} | {'σ (nm)':>8s} | {'ε (kJ/mol)':>12s}")
         _logger.debug("-" * 40)
-        for atom in self._lj_params:
-            sigma = self._lj_params[atom]["sigma"].item()
-            epsilon = self._lj_params[atom]["epsilon"].item()
-            _logger.debug(f"{atom:16s} | {sigma:8.4f} | {epsilon:8.4f}")
+        for atom in lj_params:
+            sigma = lj_params[atom]["sigma"]
+            epsilon = lj_params[atom]["epsilon"]
+            _logger.debug(f"{atom:16s} | {sigma:8.4f} | {epsilon:12.4f}")
         _logger.debug("-" * 40)
 
-    @staticmethod
-    def _calculate_lennard_jones_energy(
-        position1, position2, sigma1, sigma2, epsilon1, epsilon2
-    ):
+    def update_lj_parameters(self):
+        for atom_type, index in self._atom_type_to_index.items():
+            self._lj_params[atom_type]["sigma"] = self._sigma[index].item()
+            self._lj_params[atom_type]["epsilon"] = self._epsilon[index].item()
+
+    def _build_embedding_masks(self):
         """
-        Calculate the Lennard-Jones potential energy between two particles.
-
-        Parameters
-        ----------
-        position1 : torch.Tensor
-            The position of the first particle.
-        position2 : torch.Tensor
-            The position of the second particle.
-        sigma1 : float
-            The sigma parameter of the first particle.
-        sigma2 : float
-            The sigma parameter of the second particle.
-        epsilon1 : float
-            The epsilon parameter of the first particle.
-        epsilon2 : float
-            The epsilon parameter of the second particle.
+        Build masks for trainable embedding layers.
 
         Returns
         -------
-        torch.Tensor
-            The Lennard-Jones potential energy between the two particles.
+        sigma_mask : torch.Tensor(N_ATOM_TYPES)
+            A boolean mask for trainable sigma parameters.
+        epsilon_mask : torch.Tensor(N_ATOM_TYPES)
+            A boolean mask for trainable epsilon parameters.
         """
-        r = _torch.norm(position1 - position2)
-
-        # Lorentz-Berthelot mixing rules
-        sigma = 0.5 * (sigma1 + sigma2)
-        epsilon = _torch.sqrt(epsilon1 * epsilon2)
-
-        return (
-            4 * epsilon * ((_torch.div(sigma, r)) ** 12 - (_torch.div(sigma, r)) ** 6)
+        sigma_mask = _torch.zeros_like(
+            self._sigma_init, dtype=_torch.bool, device=self._device
         )
+        epsilon_mask = _torch.zeros_like(
+            self._epsilon_init, dtype=_torch.bool, device=self._device
+        )
+
+        for atype, params in self._parameters_to_fit.items():
+            if atype == "all":
+                # If 'all' atom types are trainable, set entire masks to True
+                if "sigma" in params:
+                    sigma_mask.fill_(True)
+                if "epsilon" in params:
+                    epsilon_mask.fill_(True)
+                continue
+
+            # Handle specific atom types
+            index = self._atom_type_to_index.get(atype)
+            if index is not None:
+                if "sigma" in params:
+                    sigma_mask[index] = True
+                if "epsilon" in params:
+                    epsilon_mask[index] = True
+
+        sigma_mask_embedding = _torch.nn.Embedding.from_pretrained(
+            sigma_mask, freeze=True
+        )
+        epsilon_mask_embedding = _torch.nn.Embedding.from_pretrained(
+            epsilon_mask, freeze=True
+        )
+
+        return sigma_mask_embedding, epsilon_mask_embedding
+
+    def _build_lj_param_lookup(self):
+        """
+        Build a lookup table for Lennard-Jones parameters.
+
+        Note
+        ----
+        Atom types are mapped to indices starting from 1.
+        The null atom type is mapped to index 0, which is used for padding.
+
+        Returns
+        -------
+        atom_type_to_index : dict[str, int]
+            A dictionary mapping atom types to indices.
+        sigma_init : torch.Tensor(N_ATOM_TYPES)
+            Initial values for sigma.
+        epsilon_init : torch.Tensor(N_ATOM_TYPES)
+            Initial values for epsilon.
+        atom_type_ids : torch.Tensor(BATCH, NATOMS)
+            Tensor of atom type IDs for each particle in each configuration.
+        lj_params : dict
+            A dictionary of Lennard-Jones parameters.
+        """
+        lj_params = {}
+        atom_type_to_index = {}
+        sigma_init = [1.0]
+        epsilon_init = [0.0]
+        atom_type_ids = []
+
+        for topology in self._topology_off:
+            atom_type_ids_topology = []
+            labels = self._forcefield.label_molecules(topology)
+            for mol in labels:
+                for _, val in mol["vdW"].items():
+                    if val.id not in lj_params:
+                        # Extract sigma and epsilon in consistent units
+                        sigma = (
+                            val.sigma.to_openmm().in_units_of(_unit.nanometers)._value
+                        )
+                        epsilon = (
+                            val.epsilon.to_openmm()
+                            .in_units_of(_unit.kilojoule_per_mole)
+                            ._value
+                        )
+
+                        lj_params[val.id] = {
+                            "sigma": sigma,
+                            "epsilon": epsilon,
+                        }
+                        atom_type_to_index[val.id] = (
+                            len(atom_type_to_index) + 1
+                        )  # 1-indexed
+                        sigma_init.append(sigma)
+                        epsilon_init.append(epsilon)
+
+                    atom_type_ids_topology.append(atom_type_to_index[val.id])
+
+            atom_type_ids.append(
+                _torch.tensor(atom_type_ids_topology, dtype=_torch.int64)
+            )
+
+        # Pad atom type IDs to the same length
+        atom_type_ids = _torch.nn.utils.rnn.pad_sequence(
+            atom_type_ids, batch_first=True, padding_value=0
+        ).to(device=self._device, dtype=_torch.int64)
+        sigma_init = _torch.tensor(
+            sigma_init, dtype=self._dtype, device=self._device, requires_grad=True
+        ).unsqueeze(-1)
+        epsilon_init = _torch.tensor(
+            epsilon_init, dtype=self._dtype, device=self._device, requires_grad=True
+        ).unsqueeze(-1)
+
+        self.print_lj_parameters(lj_params)
+
+        return atom_type_to_index, sigma_init, epsilon_init, atom_type_ids, lj_params
 
     def forward(self, xyz, solute_mask, solvent_mask):
         """
@@ -176,55 +230,66 @@ class LennardJonesPotential(_torch.nn.Module):
 
         Parameters
         ----------
-        xyz: torch.Tensor
+        xyz : torch.Tensor(BATCH, NATOMS, 3)
             The positions of the particles.
-        solute_mask : torch.Tensor(N_MM_ATOMS)
+        solute_mask : torch.Tensor(BATCH, NATOMS)
             The mask for the solute atoms.
-        solvent_mask : torch.Tensor(N_MM_ATOMS)
+        solvent_mask : torch.Tensor(BATCH, NATOMS)
             The mask for the solvent atoms.
 
         Returns
         -------
         torch.Tensor
-            The total Lennard-Jones potential energy.
+            The total Lennard-Jones potential energy for each batch.
         """
-        # TODO: generalize this
-        solute_mask = solute_mask[0]
-        solvent_mask = solvent_mask[0]
+        # Extract trainable and frozen components
+        trainable_sigma = self._sigma_embedding(self._atom_type_ids).squeeze(-1)
+        frozen_sigma = self._sigma_embedding_frozen(self._atom_type_ids).squeeze(-1)
 
-        # Create the sigma and epsilon tensors with updated parameters
-        self._sigma_tensor = _torch.stack(
-            [self._lj_params[atom]["sigma"] for atom in self._atoms_types]
-        ).to(self._device, self._dtype)
+        trainable_epsilon = self._epsilon_embedding(self._atom_type_ids).squeeze(-1)
+        frozen_epsilon = self._epsilon_embedding_frozen(self._atom_type_ids).squeeze(-1)
 
-        self._epsilon_tensor = _torch.stack(
-            [self._lj_params[atom]["epsilon"] for atom in self._atoms_types]
-        ).to(self._device, self._dtype)
+        # Combine using masks
+        sigma = trainable_sigma * self._sigma_mask + frozen_sigma * ~self._sigma_mask
+        epsilon = (
+            trainable_epsilon * self._epsilon_mask
+            + frozen_epsilon * ~self._epsilon_mask
+        )
 
-        sigma_tensor = _torch.clamp(_torch.abs(self._sigma_tensor), min=1e-16)
-        epsilon_tensor = _torch.clamp(_torch.abs(self._epsilon_tensor), min=1e-16)
+        # Apply masks
+        solute_sigma = sigma * solute_mask
+        solvent_sigma = sigma * solvent_mask
+        solute_epsilon = _torch.abs(epsilon * solute_mask) + 1e-16
+        solvent_epsilon = _torch.abs(epsilon * solvent_mask) + 1e-16
 
-        # Get the sigma and epsilon parameters
-        xyz_qm = xyz[:, solute_mask, :]
-        xyz_mm = xyz[:, solvent_mask, :]
-        solute_sigma = sigma_tensor[solute_mask]
-        solvent_sigma = sigma_tensor[solvent_mask]
-        solute_epsilon = epsilon_tensor[solute_mask]
-        solvent_epsilon = epsilon_tensor[solvent_mask]
+        xyz_qm = xyz * solute_mask.unsqueeze(-1)
+        xyz_mm = xyz * solvent_mask.unsqueeze(-1)
 
-        # Calculate pairwise distances
+        # Compute pairwise distances
         distances = _torch.cdist(xyz_mm, xyz_qm)
+        distances = _torch.where(distances > 0, distances, 1e16)
 
-        # Lorentz-Berthelot mixing rules
-        sigma = 0.5 * (solvent_sigma[:, None] + solute_sigma[None, :])
-        epsilon = _torch.sqrt(solvent_epsilon[:, None] * solute_epsilon[None, :])
+        # Reshape parameters for broadcasting
+        sigma_ij = 0.5 * (solvent_sigma[:, :, None] + solute_sigma[:, None, :])
+        epsilon_ij = _torch.sqrt(
+            solvent_epsilon[:, :, None] * solute_epsilon[:, None, :]
+        )
 
         # Lennard-Jones potential
-        r6 = (sigma / distances) ** 6
-        r12 = r6**2
-        energy_matrix = 4 * epsilon * (r12 - r6)
+        inv_r = sigma_ij / distances
+        inv_r6 = inv_r**6
+        inv_r12 = inv_r6 * inv_r6
+        energy_matrix = (
+            4
+            * epsilon_ij
+            * (inv_r12 - inv_r6)
+            * solvent_mask[:, :, None]
+            * solute_mask[:, None, :]
+        )
 
         # Sum over all pairwise interactions
         total_energy = _torch.sum(energy_matrix, dim=(1, 2))
+
+        self.update_lj_parameters()
 
         return total_energy
