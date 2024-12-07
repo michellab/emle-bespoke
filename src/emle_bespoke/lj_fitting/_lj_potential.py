@@ -67,16 +67,10 @@ class LennardJonesPotential(_torch.nn.Module):
             self._epsilon, freeze=False
         )
 
-        # Create frozen embedding layers for sigma and epsilon
-        self._sigma_embedding_frozen = _torch.nn.Embedding.from_pretrained(
-            self._sigma_init, freeze=True
-        )
-        self._epsilon_embedding_frozen = _torch.nn.Embedding.from_pretrained(
-            self._epsilon_init, freeze=True
-        )
-
         # Create embedding masks
         (
+            self._sigma_grad_mask,
+            self._epsilon_grad_mask,
             self._sigma_embedding_mask,
             self._epsilon_embedding_mask,
         ) = self._build_embedding_masks()
@@ -85,6 +79,15 @@ class LennardJonesPotential(_torch.nn.Module):
         self._epsilon_mask = self._epsilon_embedding_mask(self._atom_type_ids).squeeze(
             -1
         )
+        # Register hooks to modify gradients
+        self._sigma_embedding.weight.register_hook(self._apply_sigma_gradient_mask)
+        self._epsilon_embedding.weight.register_hook(self._apply_epsilon_gradient_mask)
+
+    def _apply_sigma_gradient_mask(self, grad):
+        return grad * self._sigma_grad_mask
+
+    def _apply_epsilon_gradient_mask(self, grad):
+        return grad * self._epsilon_grad_mask
 
     @staticmethod
     def print_lj_parameters(lj_params):
@@ -127,17 +130,17 @@ class LennardJonesPotential(_torch.nn.Module):
             if atype == "all":
                 # If 'all' atom types are trainable, set entire masks to True
                 if "sigma" in params:
-                    sigma_mask.fill_(True)
+                    sigma_mask[1:] = True
                 if "epsilon" in params:
-                    epsilon_mask.fill_(True)
+                    epsilon_mask[1:] = True
                 continue
 
             # Handle specific atom types
             index = self._atom_type_to_index.get(atype)
             if index is not None:
-                if "sigma" in params:
+                if params["sigma"]:
                     sigma_mask[index] = True
-                if "epsilon" in params:
+                if params["epsilon"]:
                     epsilon_mask[index] = True
 
         sigma_mask_embedding = _torch.nn.Embedding.from_pretrained(
@@ -147,7 +150,7 @@ class LennardJonesPotential(_torch.nn.Module):
             epsilon_mask, freeze=True
         )
 
-        return sigma_mask_embedding, epsilon_mask_embedding
+        return sigma_mask, epsilon_mask, sigma_mask_embedding, epsilon_mask_embedding
 
     def _build_lj_param_lookup(self):
         """
@@ -177,7 +180,15 @@ class LennardJonesPotential(_torch.nn.Module):
         epsilon_init = [0.0]
         atom_type_ids = []
 
-        for topology in self._topology_off:
+        prev_tipology = None
+        for i, topology in enumerate(self._topology_off):
+            if i % 1000 == 0:
+                _logger.debug(f"Processing topology {i} / {len(self._topology_off)}.")
+            if topology == prev_tipology:
+                atom_type_ids.append(atom_type_ids[-1])
+                continue
+
+            prev_tipology = topology
             atom_type_ids_topology = []
             labels = self._forcefield.label_molecules(topology)
             for mol in labels:
@@ -242,19 +253,8 @@ class LennardJonesPotential(_torch.nn.Module):
         torch.Tensor
             The total Lennard-Jones potential energy for each batch.
         """
-        # Extract trainable and frozen components
-        trainable_sigma = self._sigma_embedding(self._atom_type_ids).squeeze(-1)
-        frozen_sigma = self._sigma_embedding_frozen(self._atom_type_ids).squeeze(-1)
-
-        trainable_epsilon = self._epsilon_embedding(self._atom_type_ids).squeeze(-1)
-        frozen_epsilon = self._epsilon_embedding_frozen(self._atom_type_ids).squeeze(-1)
-
-        # Combine using masks
-        sigma = trainable_sigma * self._sigma_mask + frozen_sigma * ~self._sigma_mask
-        epsilon = (
-            trainable_epsilon * self._epsilon_mask
-            + frozen_epsilon * ~self._epsilon_mask
-        )
+        sigma = self._sigma_embedding(self._atom_type_ids).squeeze(-1)
+        epsilon = self._epsilon_embedding(self._atom_type_ids).squeeze(-1)
 
         # Apply masks
         solute_sigma = sigma * solute_mask
