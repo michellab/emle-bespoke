@@ -67,7 +67,7 @@ def train_model(
             loss_instance.train()
             optimizer.zero_grad()
             loss, rmse, max_error = loss_instance(*args, **kwargs)
-            loss.backward(retain_graph=True)
+            loss.backward(retain_graph=False)
             optimizer.step()
             if (epoch + 1) % print_every == 0:
                 _logger.info(
