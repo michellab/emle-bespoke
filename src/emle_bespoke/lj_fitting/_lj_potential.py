@@ -104,9 +104,31 @@ class LennardJonesPotential(_torch.nn.Module):
         _logger.debug("-" * 40)
 
     def update_lj_parameters(self):
+        """Update LJ parameters with the current values."""
+        from openff.units import unit as _offunit
+
+        # Update LJ parameters in the dictionary
         for atom_type, index in self._atom_type_to_index.items():
             self._lj_params[atom_type]["sigma"] = self._sigma[index].item()
             self._lj_params[atom_type]["epsilon"] = self._epsilon[index].item()
+
+        # Update the ForceField object
+        for p in self._forcefield["vdW"].parameters:
+            if p.id in self._lj_params:
+                p.sigma = _offunit.Quantity(
+                    self._lj_params[p.id]["sigma"], _offunit.nanometer
+                )
+                p.epsilon = _offunit.Quantity(
+                    self._lj_params[p.id]["epsilon"], _offunit.kilojoule_per_mole
+                )
+
+    def write_lj_parameters(self, filename_prefix="lj_parameters"):
+        """Write LJ parameters to an OFFXML file."""
+        with open(f"{filename_prefix}.dat", "w") as f:
+            for atom_type, params in self._lj_params.items():
+                f.write(f"{atom_type} {params['sigma']} {params['epsilon']}\n")
+
+        self._forcefield.to_file(f"{filename_prefix}.offxml")
 
     def _build_embedding_masks(self):
         """
@@ -208,6 +230,7 @@ class LennardJonesPotential(_torch.nn.Module):
                             "sigma": sigma,
                             "epsilon": epsilon,
                         }
+
                         atom_type_to_index[val.id] = (
                             len(atom_type_to_index) + 1
                         )  # 1-indexed
@@ -259,24 +282,25 @@ class LennardJonesPotential(_torch.nn.Module):
         # Apply masks
         solute_sigma = sigma * solute_mask
         solvent_sigma = sigma * solvent_mask
-        solute_epsilon = _torch.abs(epsilon * solute_mask) + 1e-16
-        solvent_epsilon = _torch.abs(epsilon * solvent_mask) + 1e-16
+        solute_epsilon = _torch.abs(epsilon * solute_mask)
+        solvent_epsilon = _torch.abs(epsilon * solvent_mask)
 
         xyz_qm = xyz * solute_mask.unsqueeze(-1)
         xyz_mm = xyz * solvent_mask.unsqueeze(-1)
 
         # Compute pairwise distances
         distances = _torch.cdist(xyz_mm, xyz_qm)
-        distances = _torch.where(distances > 0, distances, 1e16)
+        distances = _torch.where(distances > 0, distances, 1e32)
 
         # Reshape parameters for broadcasting
         sigma_ij = 0.5 * (solvent_sigma[:, :, None] + solute_sigma[:, None, :])
         epsilon_ij = _torch.sqrt(
-            solvent_epsilon[:, :, None] * solute_epsilon[:, None, :]
+            solvent_epsilon[:, :, None] * solute_epsilon[:, None, :] + 1e-16
         )
 
         # Lennard-Jones potential
         inv_r = sigma_ij / distances
+        inv_r = inv_r
         inv_r6 = inv_r**6
         inv_r12 = inv_r6 * inv_r6
         energy_matrix = (
@@ -289,6 +313,21 @@ class LennardJonesPotential(_torch.nn.Module):
 
         # Sum over all pairwise interactions
         total_energy = _torch.sum(energy_matrix, dim=(1, 2))
+        self._distances = distances * solvent_mask[:, :, None] * solute_mask[:, None, :]
+        self._sigmas = sigma
+        self._epsilons = epsilon
+        self._sigma_ij = sigma_ij
+        self._epsilon_ij = epsilon_ij
+        self._solvent_sigma = solvent_sigma
+        self._solute_sigma = solute_sigma
+        self._solvent_epsilon = solvent_epsilon
+        self._solute_epsilon = solute_epsilon
+        self._xyz_qm = xyz_qm
+        self._xyz_mm = xyz_mm
+        self._inv_r = inv_r
+        self._inv_r6 = inv_r6
+        self._inv_r12 = inv_r12
+        self._energy_matrix = energy_matrix
 
         self.update_lj_parameters()
 
