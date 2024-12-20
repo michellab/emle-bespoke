@@ -38,4 +38,6 @@ class EMLEPatched(_EMLE):
             The static and induced EMLE energy components in Hartree.
         """
         e_static, e_ind = super().forward(atomic_numbers, charges_mm, xyz_qm, xyz_mm)
+        # print("Est", e_static)
+        # print("Eind", e_ind)
         return self.alpha_static * e_static, self.beta_induced * e_ind

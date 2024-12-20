@@ -1,4 +1,3 @@
-import logging as _logging
 from sys import stdout
 
 _logging.getLogger().setLevel(_logging.INFO)

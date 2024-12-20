@@ -109,8 +109,10 @@ class LennardJonesPotential(_torch.nn.Module):
 
         # Update LJ parameters in the dictionary
         for atom_type, index in self._atom_type_to_index.items():
-            self._lj_params[atom_type]["sigma"] = self._sigma[index].item()
-            self._lj_params[atom_type]["epsilon"] = self._epsilon[index].item()
+            self._lj_params[atom_type]["sigma"] = _torch.abs(self._sigma[index]).item()
+            self._lj_params[atom_type]["epsilon"] = _torch.abs(
+                self._epsilon[index]
+            ).item()
 
         # Update the ForceField object
         for p in self._forcefield["vdW"].parameters:
@@ -258,7 +260,7 @@ class LennardJonesPotential(_torch.nn.Module):
 
         return atom_type_to_index, sigma_init, epsilon_init, atom_type_ids, lj_params
 
-    def forward(self, xyz, solute_mask, solvent_mask):
+    def forward(self, xyz, solute_mask, solvent_mask, start_idx=0, end_idx=None):
         """
         Calculate the Lennard-Jones potential energy for a set of positions.
 
@@ -270,20 +272,26 @@ class LennardJonesPotential(_torch.nn.Module):
             The mask for the solute atoms.
         solvent_mask : torch.Tensor(BATCH, NATOMS)
             The mask for the solvent atoms.
+        start_idx : int
+            The start index for the batch.
+        end_idx : int
+            The end index for the batch.
+
 
         Returns
         -------
         torch.Tensor
             The total Lennard-Jones potential energy for each batch.
         """
-        sigma = self._sigma_embedding(self._atom_type_ids).squeeze(-1)
-        epsilon = self._epsilon_embedding(self._atom_type_ids).squeeze(-1)
+        atom_type_ids = self._atom_type_ids[start_idx:end_idx]
+        sigma = self._sigma_embedding(atom_type_ids).squeeze(-1)
+        epsilon = self._epsilon_embedding(atom_type_ids).squeeze(-1)
 
         # Apply masks
         solute_sigma = sigma * solute_mask
         solvent_sigma = sigma * solvent_mask
-        solute_epsilon = _torch.abs(epsilon * solute_mask)
-        solvent_epsilon = _torch.abs(epsilon * solvent_mask)
+        solute_epsilon = _torch.abs(epsilon * solute_mask) + 1e-16
+        solvent_epsilon = _torch.abs(epsilon * solvent_mask) + 1e-16
 
         xyz_qm = xyz * solute_mask.unsqueeze(-1)
         xyz_mm = xyz * solvent_mask.unsqueeze(-1)
@@ -295,7 +303,7 @@ class LennardJonesPotential(_torch.nn.Module):
         # Reshape parameters for broadcasting
         sigma_ij = 0.5 * (solvent_sigma[:, :, None] + solute_sigma[:, None, :])
         epsilon_ij = _torch.sqrt(
-            solvent_epsilon[:, :, None] * solute_epsilon[:, None, :] + 1e-16
+            solvent_epsilon[:, :, None] * solute_epsilon[:, None, :]
         )
 
         # Lennard-Jones potential

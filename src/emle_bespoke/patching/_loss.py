@@ -40,6 +40,9 @@ class PatchingLoss(_BaseLoss):
         q_val=None,
         s=None,
         alpha=None,
+        l2_reg_alpha=1.0,
+        l2_reg_s=1.0,
+        l2_reg_q=1.0,
         fit_e_static=True,
         fit_e_ind=True,
         n_batches=32,
@@ -87,23 +90,31 @@ class PatchingLoss(_BaseLoss):
             atomic_numbers, xyz_qm
         )
         if fit_e_static:
-            l2_reg += self._calculate_static_regularization(
-                atomic_numbers, q_core, q_val, q_core_pred, q_val_pred
+            l2_reg += (
+                self._calculate_static_regularization(
+                    atomic_numbers, q_core, q_val, q_core_pred, q_val_pred
+                )
+                * l2_reg_q
             )
             if s is not None:
-                l2_reg += self._calculate_s_regularization(atomic_numbers, s, s_pred)
+                l2_reg += (
+                    self._calculate_s_regularization(atomic_numbers, s, s_pred)
+                    * l2_reg_s
+                )
 
         if fit_e_ind:
             # Calculate A_thole and alpha_mol.
             alpha_pred = self._get_alpha_mol(a_Thole_pred, atomic_numbers > 0)
-            l2_reg += self._calculate_alpha_regularization(alpha, alpha_pred)
+            l2_reg += (
+                self._calculate_alpha_regularization(alpha, alpha_pred) * l2_reg_alpha
+            )
 
         # Concatenate all batch results
         e_static = _torch.cat(e_static_all, dim=0)
         e_ind = _torch.cat(e_ind_all, dim=0)
 
         # Prepare target and prediction values
-        target, values = self._prepare_targets_and_values(
+        target_prep, values_prep, target, values = self._prepare_targets_and_values(
             e_static_target, e_ind_target, e_static, e_ind, fit_e_static, fit_e_ind
         )
 
@@ -112,7 +123,7 @@ class PatchingLoss(_BaseLoss):
             raise ValueError("At least one of fit_e_static or fit_e_ind must be True")
 
         # Compute loss
-        loss = self._loss(values, target)
+        loss = self._loss(target_prep, values_prep)
         loss += l2_reg
         print(f"Loss: {loss.item()}, L2 Reg: {l2_reg.item()}")
 
@@ -219,7 +230,7 @@ class PatchingLoss(_BaseLoss):
             e_ind_target if fit_e_ind else 0
         )
         values = (e_static if fit_e_static else 0) + (e_ind if fit_e_ind else 0)
-        return target / target.std(), values / values.std()
+        return target / target.std(), values / target.std(), target, values
 
     @staticmethod
     def _get_alpha_mol(A_thole, mask):

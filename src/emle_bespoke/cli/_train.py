@@ -177,6 +177,10 @@ def main():
             charges_mm=reference_data["charges_mm"],
             xyz_qm=reference_data["xyz_qm"],
             xyz_mm=reference_data["xyz_mm"],
+            q_core=reference_data["q_core"],
+            q_val=reference_data["q_val"],
+            s=reference_data["s"],
+            alpha=reference_data["alpha"],
             model=args.filename_prefix + "_bespoke.mat",
             lr=args.lr_patch,
             epochs=args.epochs,
@@ -206,7 +210,7 @@ def main():
     a["q_core"] = patched_model._emle_base._q_core.cpu().detach().numpy()
     a["sqrtk_ref"] = patched_model._emle_base.ref_values_sqrtk.cpu().detach().numpy()
 
-    scipy.io.savemat("ligand_bespoke_patched.mat", a)
+    scipy.io.savemat("ligand_bespoke_patched_reference.mat", a)
 
     msg = r"""
 ╔════════════════════════════════════════════════════════════╗

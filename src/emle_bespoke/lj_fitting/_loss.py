@@ -10,17 +10,26 @@ from ._lj_potential import LennardJonesPotential as _LennardJonesPotential
 class WeightedMSELoss(_torch.nn.Module):
     def __init__(self):
         super().__init__()
+        self._normalization = None
 
     def forward(self, inputs, targets, weights):
+        """
         assert (
             inputs.shape == targets.shape
         ), "Inputs and targets must have the same shape"
         assert (
             inputs.shape == weights.shape
         ), "Inputs and weights must have the same shape"
-        squared_error = (inputs - targets) ** 2
+        """
+
+        if self._normalization is None:
+            self._normalization = 1.0
+
+        diff = targets - inputs
+        squared_error = (diff) ** 2
         weighted_squared_error = squared_error * weights
-        return weighted_squared_error.sum()
+
+        return weighted_squared_error.sum() * self._normalization
 
 
 class InteractionEnergyLoss(_BaseLoss):
@@ -31,7 +40,7 @@ class InteractionEnergyLoss(_BaseLoss):
         emle_model,
         lj_potential,
         loss=WeightedMSELoss(),
-        weighting_method="uniform",
+        weighting_method="boltzmann",
     ):
         super().__init__()
 
@@ -52,24 +61,108 @@ class InteractionEnergyLoss(_BaseLoss):
 
         self._weighting_method = weighting_method
 
-    @staticmethod
-    def calulate_weights(e_int_target, e_int_predicted, method):
+        self._e_static_emle = None
+        self._e_ind_emle = None
+        self._weights = None
+        self.l2_reg_calc = True
+
+    def calulate_weights(self, e_int_target, e_int_predicted, method):
         import openmm.unit as _unit
 
         if method.lower() == "boltzmann":
-            temperature = 300.0 * _unit.kelvin
-            kBT = (
-                _unit.BOLTZMANN_CONSTANT_kB
-                * _unit.AVOGADRO_CONSTANT_NA
-                * temperature
-                / _unit.kilojoules_per_mole
-            )
-            weights = _torch.exp(-e_int_target / kBT)
+            if self._weights is not None:
+                weights = self._weights
+            else:
+                temperature = 500.0 * _unit.kelvin
+                kBT = (
+                    _unit.BOLTZMANN_CONSTANT_kB
+                    * _unit.AVOGADRO_CONSTANT_NA
+                    * temperature
+                    / _unit.kilojoules_per_mole
+                )
+                weights = _torch.zeros_like(e_int_target)
+
+                window_sizes = self._lj_potential._windows
+                frame = 0
+                for i in window_sizes:
+                    size = i
+                    window_end = frame + size
+
+                    # Slice only once and reuse
+                    e_int_target_window = e_int_target[frame:window_end]
+                    # e_int_predicted_window = e_int_predicted[frame:window_end].detach()
+                    window = weights[frame:window_end]
+                    """
+                    # Calculate the mask once
+                    delta = 5.0 * 4.184
+                    mask_filter = e_int_target_window > delta
+                    mask_boltzmann = ~mask_filter
+
+                    # Update weights with in-place operations
+                    window[mask_boltzmann] = e_int_target_window[mask_boltzmann]
+                    window_weights = _torch.exp(-window / kBT)
+                    window_weights[mask_filter] = 0.0
+                    """
+                    window_weights = _torch.ones_like(e_int_target_window)
+
+                    mask_uniform = e_int_target_window < 4.184
+                    mask_filter = e_int_target_window > 5 * 4.184
+                    mask_middle = ~mask_uniform & ~mask_filter
+
+                    # Apply mask_filter directly to zero weights
+                    window_weights[mask_filter] = 0.0
+                    window_weights[mask_middle] = 1.0 / _torch.sqrt(
+                        1 + (e_int_target_window[mask_middle] / 4.184 - 1) ** 2
+                    )
+
+                    # Normalize weights if sum is non-zero
+                    total_weight = window_weights.sum() * float(mask_filter.sum())
+                    if total_weight > 0:
+                        window_weights /= total_weight
+
+                    # Assign updated weights back to the original array
+                    weights[frame:window_end] = window_weights
+
+                    frame = window_end
+
+                # Process in windows
+                self._weights = weights
         elif method.lower() == "uniform":
-            n_samples = len(e_int_target)
-            weights = _torch.ones(
-                n_samples, device=e_int_target.device, dtype=e_int_target.dtype
-            )
+            if self._weights is not None:
+                weights = self._weights
+            else:
+                weights = _torch.zeros_like(e_int_target)
+
+                window_sizes = self._lj_potential._windows
+                frame = 0
+                for i in window_sizes:
+                    size = i
+                    window_end = frame + size
+
+                    # Slice only once and reuse
+                    e_int_target_window = e_int_target[frame:window_end]
+                    window = weights[frame:window_end]
+
+                    # Calculate the mask once
+                    mask_filter = e_int_target_window > 50.0
+                    mask_boltzmann = ~mask_filter
+
+                    window_weights = _torch.ones_like(e_int_target_window)
+                    # Apply mask_filter directly to zero weights
+                    window_weights[mask_filter] = 0.0
+
+                    # Normalize weights if sum is non-zero
+                    total_weight = float(mask_boltzmann.sum())
+                    if total_weight > 0:
+                        window_weights /= total_weight
+
+                    # Assign updated weights back to the original array
+                    weights[frame:window_end] = window_weights
+
+                    frame = window_end
+
+                # Process in windows
+                self._weights = weights
         elif method.lower() == "non-boltzmann":
             temperature = 300.0 * _unit.kelvin
             kBT = (
@@ -85,7 +178,16 @@ class InteractionEnergyLoss(_BaseLoss):
         return weights / weights.sum()
 
     def calculate_predicted_interaction_energy(
-        self, atomic_numbers, charges_mm, xyz_qm, xyz_mm, xyz, solute_mask, solvent_mask
+        self,
+        atomic_numbers,
+        charges_mm,
+        xyz_qm,
+        xyz_mm,
+        xyz,
+        solute_mask,
+        solvent_mask,
+        start_idx,
+        end_idx,
     ):
         if atomic_numbers.ndim == 1:
             atomic_numbers = atomic_numbers.unsqueeze(0)
@@ -96,21 +198,34 @@ class InteractionEnergyLoss(_BaseLoss):
             solvent_mask = solvent_mask.unsqueeze(0)
             solute_mask = solute_mask.unsqueeze(0)
 
-        # Calculate EMLE predictions for static and induced components
-        e_static, e_ind = self._emle_model.forward(
-            atomic_numbers,
-            charges_mm,
-            xyz_qm / ANGSTROM_TO_NANOMETER,
-            xyz_mm / ANGSTROM_TO_NANOMETER,
-        )
-        e_static = e_static * HARTREE_TO_KJ_MOL
-        e_ind = e_ind * HARTREE_TO_KJ_MOL
+        if (
+            self._lj_potential._e_static_emle is None
+            or self._lj_potential._e_ind_emle is None
+        ):
+            # Calculate EMLE predictions for static and induced components
+            e_static, e_ind = self._emle_model.forward(
+                atomic_numbers,
+                charges_mm,
+                xyz_qm / ANGSTROM_TO_NANOMETER,
+                xyz_mm / ANGSTROM_TO_NANOMETER,
+            )
+            e_static = e_static * HARTREE_TO_KJ_MOL
+            e_ind = e_ind * HARTREE_TO_KJ_MOL
+        else:
+            e_static = self._lj_potential._e_static_emle.to(atomic_numbers.device)[
+                start_idx:end_idx
+            ]
+            e_ind = self._lj_potential._e_ind_emle.to(atomic_numbers.device)[
+                start_idx:end_idx
+            ]
 
         # Calculate Lennard-Jones potential energy
         e_lj = self._lj_potential.forward(
             xyz,
             solute_mask=solute_mask,
             solvent_mask=solvent_mask,
+            start_idx=start_idx,
+            end_idx=end_idx,
         )
 
         return e_static, e_ind, e_lj
@@ -126,6 +241,7 @@ class InteractionEnergyLoss(_BaseLoss):
         solute_mask,
         solvent_mask,
         l2_reg=1.0,
+        indices=None,
     ):
         """
         Forward pass.
@@ -151,7 +267,11 @@ class InteractionEnergyLoss(_BaseLoss):
         l2_reg: float or None
             L2 regularization strength. If None, no regularization is applied.
         """
-        # Calculate the predicted interaction energy
+        if indices is not None:
+            start_idx, end_idx = indices[0], indices[-1] + 1
+        else:
+            start_idx, end_idx = 0, None
+
         e_static, e_ind, e_lj = self.calculate_predicted_interaction_energy(
             atomic_numbers=atomic_numbers,
             charges_mm=charges_mm,
@@ -160,6 +280,8 @@ class InteractionEnergyLoss(_BaseLoss):
             xyz=xyz,
             solute_mask=solute_mask,
             solvent_mask=solvent_mask,
+            start_idx=start_idx,
+            end_idx=end_idx,
         )
 
         target = e_int_target
@@ -168,14 +290,14 @@ class InteractionEnergyLoss(_BaseLoss):
         if isinstance(self._loss, WeightedMSELoss):
             weights = self.calulate_weights(
                 e_int_target, values, self._weighting_method
-            )
+            )[start_idx:end_idx].to(e_int_target.device)
             loss = self._loss(values, target, weights)
         elif isinstance(self._loss, _torch.nn.MSELoss):
             loss = self._loss(values, target)
         else:
             raise NotImplementedError(f"Loss function {self._loss} not implemented")
 
-        if l2_reg is not None:
+        if l2_reg is not None and self.l2_reg_calc:
             epsilon_std = (
                 self._lj_potential._epsilon_init.std()
                 if self._lj_potential._epsilon_init.shape[0] > 1
@@ -186,18 +308,27 @@ class InteractionEnergyLoss(_BaseLoss):
                 if self._lj_potential._sigma_init.shape[0] > 1
                 else 1.0
             )
-            target_std = target.std() if target.shape[0] > 1 else 1.0
 
-            epsilon_diff = (
-                self._lj_potential._epsilon - self._lj_potential._epsilon_init
+            # Get the current epsilon and sigma values
+            atom_types = _torch.arange(
+                self._lj_potential._num_atom_types + 1, device=xyz.device
             )
-            epsilon_diff = epsilon_diff / epsilon_std
-            sigma_diff = self._lj_potential._sigma - self._lj_potential._sigma_init
-            sigma_diff = sigma_diff / sigma_std
+            epsilon = self._lj_potential._epsilon_embedding(atom_types)
+            sigma = self._lj_potential._sigma_embedding(atom_types)
 
+            # Calculate the regularization term
+            epsilon_diff = (
+                epsilon - self._lj_potential._epsilon_init
+            )  # / (0.1*4.184) # / epsilon_std #/ self._lj_potential._epsilon_init.mean()# / epsilon_std
+            sigma_diff = (
+                sigma - self._lj_potential._sigma_init
+            )  # / 0.1 # / sigma_std #/ self._lj_potential._sigma_init.mean()# / sigma_std
             reg = l2_reg * (epsilon_diff.square().sum() + sigma_diff.square().sum())
 
-            loss = loss / target_std + reg
+            loss += reg
+        else:
+            loss = loss
+
         return (
             loss,
             self._get_rmse(values, target),

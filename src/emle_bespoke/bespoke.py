@@ -4,7 +4,9 @@ import torch as _torch
 from emle.models import EMLEBase as _EMLEBase
 from emle.train._utils import pad_to_max
 from loguru import logger as _logger
+from torch.utils.data import DataLoader as _DataLoader
 
+from .dataset import MolecularDataset as _MolecularDataset
 from .reference_data import ReferenceData as _ReferenceData
 from .utils import write_dict_to_file as _write_dict_to_file
 
@@ -289,6 +291,10 @@ class BespokeModelTrainer:
         charges_mm,
         xyz_qm,
         xyz_mm,
+        q_core,
+        q_val,
+        s,
+        alpha,
         model=None,
         lr=0.0001,
         epochs=100,
@@ -337,7 +343,7 @@ class BespokeModelTrainer:
         """
         import torch as _torch
 
-        from ._train import train_model
+        from ._train_m import train_model
         from .patching import EMLEPatched, PatchingLoss
 
         msg = r"""
@@ -381,6 +387,10 @@ class BespokeModelTrainer:
         e_ind_target = _torch.tensor(e_ind_target).to(
             device=self._device, dtype=self._dtype
         )
+        q_core = pad_to_max(q_core).to(device=self._device, dtype=self._dtype)
+        q_val = pad_to_max(q_val).to(device=self._device, dtype=self._dtype)
+        s = pad_to_max(s).to(device=self._device, dtype=self._dtype)
+        alpha = pad_to_max(alpha).to(device=self._device, dtype=self._dtype)
         """
         # Patch the model
         train_model(
@@ -402,10 +412,10 @@ class BespokeModelTrainer:
         )
         """
         # Patch the model
+        opt_params = ["a_QEq", "ref_values_chi"]
         train_model(
             loss_class=PatchingLoss,
-            opt_param_names=["a_QEq", "ref_values_chi"],
-            # opt_param_names=["_q_core", "a_QEq", "ref_values_chi", "ref_values_sqrtk"],
+            opt_param_names=opt_params,
             lr=lr,
             epochs=epochs,
             print_every=print_every,
@@ -416,16 +426,21 @@ class BespokeModelTrainer:
             charges_mm=charges_mm,
             xyz_qm=xyz_qm,
             xyz_mm=xyz_mm,
+            q_core=q_core,
+            q_val=q_val,
+            alpha=alpha,
+            s=s if "ref_values_s" in opt_params else None,
             fit_e_static=True,
             fit_e_ind=False,
         )
+
         PatchingLoss._update_s_gpr(patched_model._emle_base)
         PatchingLoss._update_chi_gpr(patched_model._emle_base)
 
         train_model(
             loss_class=PatchingLoss,
-            opt_param_names=["a_Thole", "k_Z", "ref_values_sqrtk"],
-            # opt_param_names=["_q_core", "a_QEq", "ref_values_chi", "ref_values_sqrtk"],
+            # opt_param_names=["a_Thole", "k_Z"],
+            opt_param_names=["a_Thole", "ref_values_sqrtk"],
             lr=lr,
             epochs=epochs,
             print_every=print_every,
@@ -434,15 +449,17 @@ class BespokeModelTrainer:
             e_ind_target=e_ind_target,
             atomic_numbers=atomic_numbers,
             charges_mm=charges_mm,
+            alpha=alpha,
             xyz_qm=xyz_qm,
             xyz_mm=xyz_mm,
             fit_e_static=False,
             fit_e_ind=True,
         )
-
         PatchingLoss._update_s_gpr(patched_model._emle_base)
         PatchingLoss._update_chi_gpr(patched_model._emle_base)
-        PatchingLoss._update_sqrtk_gpr(patched_model._emle_base)
+
+        if patched_model._alpha_mode == "reference":
+            PatchingLoss._update_sqrtk_gpr(patched_model._emle_base)
 
         self._alpha_static = patched_model.alpha_static.item()
         self._beta_induced = patched_model.beta_induced.item()
@@ -541,20 +558,45 @@ class BespokeModelTrainer:
         e_int_target = _torch.tensor(e_int_target)
 
         # Convert reference data to tensors
-        atomic_numbers = pad_to_max(atomic_numbers).to(
-            device=self._device, dtype=_torch.int64
+        atomic_numbers = pad_to_max(atomic_numbers)
+        charges_mm = pad_to_max(charges_mm)
+        xyz_qm = pad_to_max(xyz_qm)
+        xyz_mm = pad_to_max(xyz_mm)
+        xyz = pad_to_max(xyz)
+        solute_mask = pad_to_max(solute_mask)
+        solvent_mask = pad_to_max(solvent_mask)
+        e_int_target = pad_to_max(e_int_target)
+
+        dev = _torch.device("cuda")
+        atomic_numbers = atomic_numbers.to(device=dev)
+        charges_mm = charges_mm.to(device=dev)
+        xyz_qm = xyz_qm.to(device=dev)
+        xyz_mm = xyz_mm.to(device=dev)
+        xyz = xyz.to(device=dev)
+        solute_mask = solute_mask.to(device=dev)
+        solvent_mask = solvent_mask.to(device=dev)
+        e_int_target = e_int_target.to(device=dev)
+
+        dataset = _MolecularDataset(
+            xyz_qm=xyz_qm,
+            xyz_mm=xyz_mm,
+            xyz=xyz,
+            atomic_numbers=atomic_numbers,
+            charges_mm=charges_mm,
+            e_int_target=e_int_target,
+            solute_mask=solute_mask,
+            solvent_mask=solvent_mask,
         )
-        charges_mm = pad_to_max(charges_mm).to(device=self._device, dtype=self._dtype)
-        xyz_qm = pad_to_max(xyz_qm).to(device=self._device, dtype=self._dtype)
-        xyz_mm = pad_to_max(xyz_mm).to(device=self._device, dtype=self._dtype)
-        xyz = pad_to_max(xyz).to(device=self._device, dtype=self._dtype)
-        solute_mask = pad_to_max(solute_mask).to(device=self._device, dtype=_torch.bool)
-        solvent_mask = pad_to_max(solvent_mask).to(
-            device=self._device, dtype=_torch.bool
+
+        # Create DataLoader
+        dataloader = _DataLoader(
+            dataset,
+            batch_size=200000,
+            shuffle=False,
+            pin_memory=False,
+            pin_memory_device="cuda",
         )
-        e_int_target = pad_to_max(e_int_target).to(
-            device=self._device, dtype=self._dtype
-        )
+
         """
         e_int_loss = _InteractionEnergyLoss(
             emle_model=patched_model,
@@ -590,14 +632,7 @@ class BespokeModelTrainer:
             print_every=print_every,
             emle_model=patched_model,
             loss_class_kwargs=loss_class_kwargs,
-            e_int_target=e_int_target,
-            atomic_numbers=atomic_numbers,
-            charges_mm=charges_mm,
-            xyz_qm=xyz_qm,
-            xyz_mm=xyz_mm,
-            xyz=xyz,
-            solute_mask=solute_mask,
-            solvent_mask=solvent_mask,
+            dataloader=dataloader,
         )
         """
         # Store the fitted data for plotting

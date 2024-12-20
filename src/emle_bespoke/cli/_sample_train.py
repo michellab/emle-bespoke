@@ -111,6 +111,13 @@ def main():
         help="The EMLE model to use for the solute.",
     )
 
+    parser.add_argument(
+        "--alpha-mode",
+        type=str,
+        default="species",
+        help="Alpha mode of the EMLE model.",
+    )
+
     # Parse the arguments
     args = parser.parse_args()
 
@@ -179,7 +186,12 @@ def main():
 
     # Add the EMLE force
     system, context = _add_emle_force(
-        args.emle_model, qm_region, system, context, topology
+        args.emle_model,
+        qm_region,
+        system,
+        context,
+        topology,
+        alpha_mode=args.alpha_mode,
     )
 
     if args.n_equilibration:
