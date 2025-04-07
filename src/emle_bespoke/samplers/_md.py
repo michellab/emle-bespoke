@@ -180,6 +180,7 @@ class MDSampler(_BaseSampler):
         calc_induction: bool = True,
         calc_horton: bool = True,
         calc_polarizability: bool = True,
+        label: str = "",
     ) -> dict:
         """
         Sample the system for a given number of steps and calculate the necessary properties.
@@ -234,10 +235,10 @@ class MDSampler(_BaseSampler):
         # symbols = symbols_qm + symbols_mm
 
         # Define the directory for vacuum calculations and QM/MM calculations
-        directory_vacuum = "vacuum"
-        directory_pc = "pc"
+        directory_vacuum = "vacuum" + label
+        directory_pc = "pc" + label
 
-        orca_blocks = "%MaxCore 1024\n%pal\nnprocs 8\nend\n"
+        orca_blocks = "%MaxCore 1024\n%pal\nnprocs 2\nend\n"
 
         # Run the single point QM energy calculation
         charges_mm = self._point_charges[~molecule_mask][R_cutoff]

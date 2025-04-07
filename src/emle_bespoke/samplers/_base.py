@@ -1,49 +1,78 @@
 """Base class for samplers."""
-from abc import ABC, abstractmethod
 from typing import Any, Tuple, Union
 
 import numpy as _np
-import openmm as _mm
 from loguru import logger as _logger
 
 from ..calculators import HortonCalculator as _HortonCalculator
 from ..calculators import ORCACalculator as _ORCACalculator
-from ..reference_data import ReferenceData as _ReferenceData
 
 
-class BaseSampler(ABC):
-    """Base class for samplers."""
+class Sampler:
+    """
+    Base class for samplers.
 
+    emle-bespoke samplers should inherit from this class and implement the `sample` method.
+
+    The `sample` method should return a dictionary containing the following keys:
+    - `pos_qm`: _np.ndarray(NATOMS, 3)
+        Atomic positions in the QM region in Angstrom.
+    - `symbols_qm`: list[str]
+        Atomic symbols in the QM region.
+    - `pos_mm`: _np.ndarray(NATOMS, 3)
+        Atomic positions in the MM region in Angstrom.
+    - `charges_mm`: _np.ndarray(NATOMS), optional
+        Point charges in the MM region.
+    - `charges_qm`: _np.ndarray(NATOMS), optional
+        Point charges in the QM region.
+    - `symbols_mm`: list[str], optional, optional
+        Atomic symbols in the MM region.
+    
+    The `sample` method should also take the following keyword arguments:
+    - `calc_static`: bool
+        Whether to calculate the static energy.
+    - `calc_induction`: bool
+        Whether to calculate the induction energy.
+    - `calc_mbis`: bool
+        Whether to calculate the horton partitioning.
+    - `calc_polarizability`: bool
+        Whether to calculate the polarizability.
+    
+    Attributes
+    ----------
+    system : simtk.openmm.System
+        OpenMM system.
+    context : simtk.openmm.Context
+        OpenMM context.
+    integrator : simtk.openmm.Integrator
+        OpenMM integrator.
+    topology : simtk.openmm.app.Topology
+        OpenMM topology.
+    qm_calculator : QMCalculator
+        QM calculator.
+    mbis_calculator : MBISCalculator
+        MBIS calculator.
+    energy_scale : float
+        Energy scale to convert from the QM calculator energy units to kJ/mol.
+    length_scale : float
+        Length scale to convert from the QM calculator length units to Angstrom.
+    """
     def __init__(
         self,
-        system: Union[_mm.System, None] = None,
-        context: Union[_mm.Context, None] = None,
-        integrator: Union[_mm.Integrator, None] = None,
-        topology: Union[_mm.app.Topology, None] = None,
-        reference_data: Union[_ReferenceData, None] = None,
-        qm_calculator: Union[_ORCACalculator, None] = None,
-        horton_calculator: Union[_HortonCalculator, None] = None,
+        qm_calculator: Union[_ORCACalculator, None] = None, # TODO: change this to QMCalculator
+        horton_calculator: Union[_HortonCalculator, None] = None, # TODO: change this to MBISCalculator
         energy_scale: float = 1.0,
         length_scale: float = 1.0,
     ):
-        # Set the OpenMM objects
-        self._system = system
-        self._context = context
-        self._integrator = integrator
-        self._topology = topology
-
-        # Set the reference data
-        self._reference_data = reference_data or _ReferenceData()
-
-        # Set the calculators
+        # Set the calculator
         self._qm_calculator = qm_calculator
-        self._horton_calculator = horton_calculator
+        self._mbis_calculator = horton_calculator
 
         # Set the energy and length scales
         self._energy_scale = energy_scale
         self._length_scale = length_scale
 
-    @abstractmethod
+    #@abstractmethod
     def sample(self, *args, **kwargs):
         raise NotImplementedError(
             "This method must be implemented in the derived sampler class."
@@ -52,11 +81,7 @@ class BaseSampler(ABC):
     # ------------------------------------------------------------------------- #
     #                            Concrete methods                               #
     # ------------------------------------------------------------------------- #
-    @property
-    def reference_data(self):
-        return self._reference_data
-
-    def _get_point_charges(self):
+    def _get_point_charges(self, *args, **kwargs):
         """
         Get the point charges from the system.
 
@@ -64,16 +89,9 @@ class BaseSampler(ABC):
         -------
         point_charges: _np.ndarray(NATOMS)
         """
-        assert self._system, "The system must be set before getting the point charges."
-        non_bonded_force = [
-            f for f in self._system.getForces() if isinstance(f, _mm.NonbondedForce)
-        ][0]
-        point_charges = _np.zeros(self._topology.getNumAtoms(), dtype=_np.float64)
-        for i in range(non_bonded_force.getNumParticles()):
-            # charge, sigma, epsilon
-            charge, _, _ = non_bonded_force.getParticleParameters(i)
-            point_charges[i] = charge._value
-        return point_charges
+        raise NotImplementedError(
+            "This method must be implemented in the derived sampler class."
+        )
 
     def get_static_energy(
         self,
@@ -167,7 +185,7 @@ class BaseSampler(ABC):
                 directory=directory_vacuum,
             )
 
-            horton_data = self._horton_calculator.get_horton_partitioning(
+            horton_data = self._mbis_calculator.get_horton_partitioning(
                 input_file=self._qm_calculator.name_prefix + ".molden.input",
                 directory=directory_vacuum,
                 scheme="mbis",
