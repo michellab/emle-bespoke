@@ -1,7 +1,7 @@
 import os as _os
 import sys as _sys
 
-from loguru import logger
+from loguru import logger as _logger
 
 from ._version import get_versions
 
@@ -29,13 +29,34 @@ def log_banner() -> None:
 ║                                                      ║
 ╚══════════════════════════════════════════════════════╝
 version: {}
-""".format(
-        version
-    )
+""".format(version)
 
     # Log each line of the banner
     for line in banner.split("\n")[1:-1]:
-        logger.info(line)
+        _logger.info(line)
+
+
+def log_cli_args(args):
+    """Log the CLI arguments."""
+    msg = r"""
+╔════════════════════════════════════════════════════════════╗
+║                      Input CLI Arguments                   ║
+╚════════════════════════════════════════════════════════════╝
+"""
+    for line in msg.split("\n"):
+        _logger.info(line)
+    for arg in vars(args):
+        _logger.info(f"{arg}: {getattr(args, arg)}")
+    _logger.info("══════════════════════════════════════════════════════════════\n")
+
+
+def log_termination():
+    msg = r"""
+╔════════════════════════════════════════════════════════════╗
+║              emle-bespoke terminated normally!             ║
+╚════════════════════════════════════════════════════════════╝"""
+    for line in msg.split("\n"):
+        _logger.info(line)
 
 
 # Filter to block loggers not starting with "emle_bespoke"
@@ -53,8 +74,8 @@ def config_logger() -> None:
 
     fmt = "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name:40}</cyan> | {message}"
 
-    logger.remove()  # Remove the default handler
-    logger.add(
+    _logger.remove()  # Remove the default handler
+    _logger.add(
         _sys.stdout,
         format=fmt,
         level=log_level,

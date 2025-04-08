@@ -138,7 +138,7 @@ def train_model(
 
                 loss_instance.l2_reg_calc = False
 
-            print(f"Epoch {epoch+1}: Loss = {loss_total}, RMSE = {rmse_total}")
+            print(f"Epoch {epoch + 1}: Loss = {loss_total}, RMSE = {rmse_total}")
 
             optimizer.step()
 
@@ -155,12 +155,12 @@ def train_model(
                     for i in range(1, n_iterations_stop)
                 ]
                 if all(change < loss_threshold for change in recent_loss_changes):
-                    _logger.info(f"Early stopping triggered at epoch {epoch+1}.")
+                    _logger.info(f"Early stopping triggered at epoch {epoch + 1}.")
                     break
 
             if (epoch + 1) % print_every == 0 or epoch <= 1:
                 _logger.info(
-                    f"Epoch {epoch+1}: Loss ={loss:9.4f}    "
+                    f"Epoch {epoch + 1}: Loss ={loss:9.4f}    "
                     f"RMSE ={rmse:9.4f}    "
                     f"Max Error ={max_error:9.4f}"
                 )

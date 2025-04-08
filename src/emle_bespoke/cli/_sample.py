@@ -321,7 +321,7 @@ def main():
         ref_data.add(ref_data_output)
 
     # Save the reference data
-    ref_data.save(args.filename_prefix)
+    ref_data.write(args.filename_prefix)
 
     _log_termination()
 

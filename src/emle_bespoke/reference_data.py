@@ -1,10 +1,10 @@
 import pickle
-from typing import Any, Dict
+from typing import Dict
 
 from loguru import logger as _logger
 
 
-class ReferenceData:
+class ReferenceData(dict):
     def __init__(self, data: Dict = None):
         """
         Initialize the ReferenceData object with optional initial data.
@@ -14,79 +14,14 @@ class ReferenceData:
         data: dict, optional
             Initial reference data to load.
         """
-        self._reference_data = data if data else {}
+        super().__init__(data if data else {})
 
-    def __getitem__(self, key: str) -> Any:
+    def append(self, data: Dict) -> None:
         """
-        Allows subscript access to the reference data.
-
-        Parameters
-        ----------
-        key : str
-            The key to retrieve from the reference data.
-
-        Returns
-        -------
-        Any
-            The value associated with the given key.
-
-        Raises
-        ------
-        KeyError
-            If the key is not found in the reference data.
+        Append data to the reference data.
         """
-        return self._reference_data[key]
-
-    def __setitem__(self, key: str, value: Any) -> None:
-        """
-        Allows setting values in the reference data via subscript.
-
-        Parameters
-        ----------
-        key : str
-            The key to set in the reference data.
-        value : Any
-            The value to associate with the key.
-        """
-        self._reference_data[key] = value
-
-    def __delitem__(self, key: str) -> None:
-        """
-        Allows deleting items from the reference data via subscript.
-
-        Parameters
-        ----------
-        key : str
-            The key to delete from the reference data.
-        """
-        del self._reference_data[key]
-
-    def __contains__(self, key: str) -> bool:
-        """
-        Allows checking if a key exists in the reference data using 'in' keyword.
-
-        Parameters
-        ----------
-        key : str
-            The key to check for existence in the reference data.
-
-        Returns
-        -------
-        bool
-            True if the key is present in the reference data, otherwise False.
-        """
-        return key in self._reference_data
-
-    def __repr__(self) -> str:
-        """
-        Provides a string representation of the ReferenceData object.
-
-        Returns
-        -------
-        str
-            A string representation of the ReferenceData object.
-        """
-        return f"ReferenceData({self._reference_data})"
+        for key, value in data.items():
+            self.setdefault(key, []).append(value)
 
     def write(self, filename: str = "ref_data.pkl") -> None:
         """
@@ -98,8 +33,10 @@ class ReferenceData:
             Filename to save the reference data.
         """
         _logger.info(f"Writing reference data to {filename}.")
+        if not filename.endswith(".pkl"):
+            filename = filename + ".pkl"
         with open(filename, "wb") as f:
-            pickle.dump(self._reference_data, f)
+            pickle.dump(dict(self), f)
 
     def read(self, filename: str = "ref_data.pkl", overwrite: bool = True) -> Dict:
         """
@@ -125,16 +62,17 @@ class ReferenceData:
             with open(filename, "rb") as f:
                 data = pickle.load(f)
 
-            if overwrite or not self._reference_data:
-                self._reference_data = data
+            if overwrite or not self:
+                self.clear()
+                self.update(data)
             else:
                 self._extend_data(data)
 
-            return self._reference_data
+            return dict(self)
 
         except FileNotFoundError:
             _logger.warning(f"File {filename} not found. Returning existing data.")
-            return self._reference_data
+            return dict(self)
         except Exception as e:
             _logger.error(f"Error reading data from {filename}: {e}")
             raise
@@ -149,7 +87,7 @@ class ReferenceData:
             The data to merge with the existing reference data.
         """
         for key, value in new_data.items():
-            self._reference_data.setdefault(key, []).extend(value)
+            self.setdefault(key, []).extend(value)
 
     def get_data(self) -> Dict:
         """
@@ -160,15 +98,15 @@ class ReferenceData:
         dict
             The current reference data.
         """
-        return self._reference_data
+        return dict(self)
 
     def clear_data(self) -> None:
         """
         Clear the reference data.
         """
-        self._reference_data.clear()
+        self.clear()
 
-    def add_data_to_key(self, key: str, data: Dict) -> None:
+    def add_data_to_key(self, key: str, data: Dict) -> Dict:
         """
         Add data to a specific key in the reference data.
 
@@ -178,5 +116,62 @@ class ReferenceData:
             The key to which to add the data.
         data: dict
             The data to add to the key.
+
+        Returns
+        -------
+        dict
+            The reference data with the added data.
         """
-        self._reference_data.setdefault(key, []).append(data)
+        self.setdefault(key, []).append(data)
+        return dict(self)
+
+    def add(self, data: Dict) -> Dict:
+        """
+        Add data to the reference data.
+
+        Parameters
+        ----------
+        data: dict
+            The data to add to the reference data.
+
+        Returns
+        -------
+        dict
+            The reference data with the added data.
+        """
+        for key, value in data.items():
+            self.setdefault(key, []).extend(
+                [value] if not isinstance(value, list) else value
+            )
+        return dict(self)
+
+    def to_tensors(self) -> Dict:
+        """
+        Get the reference data in tensor format.
+
+        This method converts the reference data dictionary into tensors by padding
+        sequences to the same length. Each value in the dictionary is padded to match
+        the length of the longest sequence.
+
+        Returns
+        -------
+        Dict
+            Dictionary containing the reference data converted to padded tensors.
+            Keys are the same as the original data, values are padded tensors.
+        """
+        import torch as _torch
+        from emle.train._utils import pad_to_max
+
+        data = {}
+        for key, value in self.items():
+            if not value:  # Skip empty lists
+                continue
+            try:
+                if isinstance(value[0], (int, float)):
+                    data[key] = _torch.tensor(value)
+                else:
+                    data[key] = pad_to_max(value, max_length=None)
+            except Exception as e:
+                raise ValueError(f"Failed to convert {key} to tensor format: {str(e)}")
+
+        return data

@@ -1,4 +1,5 @@
 """Module for storing constants used in the emle_bespoke package."""
+
 ANGSTROM_TO_BOHR = 1.8897259886
 ANGSTROM_TO_NANOMETER = 0.1
 HARTREE_TO_KJ_MOL = 2625.5002
@@ -123,3 +124,5 @@ ATOMIC_NUMBERS_TO_SYMBOLS = {
     117: "Ts",
     118: "Og",
 }
+
+SYMBOLS_TO_ATOMIC_NUMBERS = {v: k for k, v in ATOMIC_NUMBERS_TO_SYMBOLS.items()}

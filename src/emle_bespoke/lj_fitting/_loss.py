@@ -1,4 +1,5 @@
 """Loss function for the EMLE patched model."""
+
 import torch as _torch
 from emle.models import EMLE as _EMLE
 from emle.train._loss import _BaseLoss

@@ -1,4 +1,5 @@
 """Bespoke model trainer containg various thin wrappers."""
+
 import numpy as _np
 import torch as _torch
 from emle.models import EMLEBase as _EMLEBase
@@ -198,6 +199,7 @@ class BespokeModelTrainer:
                 calc_induction=calc_induction,
                 calc_horton=calc_horton,
                 calc_polarizability=calc_polarizability,
+                label=str(i),
             )
 
         _logger.info("Finished sampling reference data.")
@@ -343,8 +345,8 @@ class BespokeModelTrainer:
         """
         import torch as _torch
 
-        from ._train_m import train_model
-        from .patching import EMLEPatched, PatchingLoss
+        from .train import EMLEPatched, PatchingLoss
+        from .train._train_m import train_model
 
         msg = r"""
 ╔════════════════════════════════════════════════════════════╗
@@ -371,7 +373,7 @@ class BespokeModelTrainer:
             beta_induced=self._beta_induced,
             device=self._device,
             dtype=self._dtype,
-            alpha_mode="reference",
+            alpha_mode="species",
         )
 
         # Convert numpy arrays to tensors
@@ -439,8 +441,8 @@ class BespokeModelTrainer:
 
         train_model(
             loss_class=PatchingLoss,
-            # opt_param_names=["a_Thole", "k_Z"],
-            opt_param_names=["a_Thole", "ref_values_sqrtk"],
+            opt_param_names=["a_Thole", "k_Z"],
+            # opt_param_names=["a_Thole", "ref_values_sqrtk"],
             lr=lr,
             epochs=epochs,
             print_every=print_every,
@@ -527,7 +529,7 @@ class BespokeModelTrainer:
     ):
         from ._train import train_model
         from .lj_fitting import InteractionEnergyLoss as _InteractionEnergyLoss
-        from .patching import EMLEPatched
+        from .train import EMLEPatched
 
         msg = r"""
 ╔════════════════════════════════════════════════════════════╗

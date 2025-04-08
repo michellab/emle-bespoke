@@ -1,13 +1,14 @@
 """Loss function for the EMLE patched model."""
+
 import torch as _torch
-from emle.models import EMLE
+from emle.models import EMLE as _EMLE
 from emle.train._loss import _BaseLoss
 
 from .._constants import HARTREE_TO_KJ_MOL
 
 
 class PatchingLoss(_BaseLoss):
-    def __init__(self, emle_model, loss=None):
+    def __init__(self, emle_model, loss=_torch.nn.MSELoss()):
         """
         Initialize the PatchingLoss class.
 
@@ -19,23 +20,23 @@ class PatchingLoss(_BaseLoss):
             Loss function to use (default: MSELoss).
         """
         super().__init__()
-        self._validate_emle_model(emle_model)
-        self._emle_model = emle_model
-        self._loss = loss if loss else _torch.nn.MSELoss()
-
-    @staticmethod
-    def _validate_emle_model(emle_model):
-        if not isinstance(emle_model, EMLE):
+        if not isinstance(emle_model, _EMLE):
             raise TypeError("emle_model must be an instance of EMLE")
+
+        self._emle_model = emle_model
+
+        if not isinstance(loss, _torch.nn.Module):
+            raise TypeError("loss must be an instance of torch.nn.Module")
+        self._loss = loss
 
     def forward(
         self,
-        e_static_target,
-        e_ind_target,
-        atomic_numbers,
-        charges_mm,
-        xyz_qm,
-        xyz_mm,
+        e_static_target=None,
+        e_ind_target=None,
+        atomic_numbers=None,
+        charges_mm=None,
+        xyz_qm=None,
+        xyz_mm=None,
         q_core=None,
         q_val=None,
         s=None,
@@ -43,8 +44,6 @@ class PatchingLoss(_BaseLoss):
         l2_reg_alpha=1.0,
         l2_reg_s=1.0,
         l2_reg_q=1.0,
-        fit_e_static=True,
-        fit_e_ind=True,
         n_batches=32,
     ):
         """
@@ -52,9 +51,9 @@ class PatchingLoss(_BaseLoss):
 
         Parameters
         ----------
-        e_static_target: torch.Tensor (NBATCH,)
+        e_static_target: torch.Tensor (NBATCH,), optional
             Target static energy component in kJ/mol.
-        e_ind_target: torch.Tensor (NBATCH,)
+        e_ind_target: torch.Tensor (NBATCH,), optional
             Target induced energy component in kJ/mol.
         atomic_numbers: torch.Tensor (NBATCH, N_QM_ATOMS)
             Atomic numbers of QM atoms.
@@ -70,13 +69,14 @@ class PatchingLoss(_BaseLoss):
             Valence charges (default: None).
         s: torch.Tensor, optional
             Static component for regularization (default: None).
-        fit_e_static: bool
-            Whether to fit the static component.
-        fit_e_ind: bool
-            Whether to fit the induced component.
         n_batches: int
             Number of batches for splitting input.
         """
+        if e_static_target is None and e_ind_target is None:
+            raise ValueError(
+                "At least one of e_static_target or e_ind_target must be provided"
+            )
+
         self._update_emle_model_parameters()
 
         # Calculate EMLE predictions in batches
@@ -89,7 +89,9 @@ class PatchingLoss(_BaseLoss):
         s_pred, q_core_pred, q_val_pred, a_Thole_pred = self._predict_emle_parameters(
             atomic_numbers, xyz_qm
         )
-        if fit_e_static:
+
+        # Add regularization based on which components are being fit
+        if e_static_target is not None:
             l2_reg += (
                 self._calculate_static_regularization(
                     atomic_numbers, q_core, q_val, q_core_pred, q_val_pred
@@ -102,8 +104,7 @@ class PatchingLoss(_BaseLoss):
                     * l2_reg_s
                 )
 
-        if fit_e_ind:
-            # Calculate A_thole and alpha_mol.
+        if e_ind_target is not None:
             alpha_pred = self._get_alpha_mol(a_Thole_pred, atomic_numbers > 0)
             l2_reg += (
                 self._calculate_alpha_regularization(alpha, alpha_pred) * l2_reg_alpha
@@ -113,17 +114,21 @@ class PatchingLoss(_BaseLoss):
         e_static = _torch.cat(e_static_all, dim=0)
         e_ind = _torch.cat(e_ind_all, dim=0)
 
-        # Prepare target and prediction values
-        target_prep, values_prep, target, values = self._prepare_targets_and_values(
-            e_static_target, e_ind_target, e_static, e_ind, fit_e_static, fit_e_ind
-        )
-
-        # Validate fit configuration
-        if not fit_e_static and not fit_e_ind:
-            raise ValueError("At least one of fit_e_static or fit_e_ind must be True")
+        if e_static_target is not None and e_ind_target is not None:
+            # Fit total energy Etot=Estatic+Einduced
+            target = e_static_target + e_ind_target
+            values = e_static + e_ind
+        elif e_static_target is not None:
+            # Fit only static component, Estatic
+            target = e_static_target
+            values = e_static
+        else:
+            # Fit only induced component, Einduced
+            target = e_ind_target
+            values = e_ind
 
         # Compute loss
-        loss = self._loss(target_prep, values_prep)
+        loss = self._loss(values, target)
         loss += l2_reg
         print(f"Loss: {loss.item()}, L2 Reg: {l2_reg.item()}")
 

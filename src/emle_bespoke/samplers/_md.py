@@ -1,5 +1,4 @@
 import time
-from typing import Any, Tuple
 
 import numpy as _np
 import openmm as _mm
@@ -7,13 +6,12 @@ import openmm.unit as _unit
 from loguru import logger as _logger
 
 from .._constants import ATOMIC_NUMBERS_TO_SYMBOLS as _ATOMIC_NUMBERS_TO_SYMBOLS
-from ..reference_data import ReferenceData as _ReferenceData
-from ._base import BaseSampler as _BaseSampler
+from ._openmm_sampler import OpenMMSampler as _OpenMMSampler
 
 
-class MDSampler(_BaseSampler):
+class MDSampler(_OpenMMSampler):
     """
-    Class to calculate the reference QM(/MM) data.
+    Simple OpenMM-based plain MD sampler.
 
     Parameters
     ----------
@@ -25,42 +23,55 @@ class MDSampler(_BaseSampler):
         OpenMM integrator.
     topology: simtk.openmm.app.Topology
         OpenMM topology.
+    qm_region: _np.ndarray
+        An array of indices of the QM region.
+    cutoff: float
+        Cutoff for interaction between QM and MM region (group-based cutoff).
+    energy_scale: float
+        Energy scale.
+    length_scale: float
+        Length scale.
+
+    Attributes
+    ----------
+    Inherits all attributes from OpenMMSampler class.
+
+    _cutoff: float
+        Cutoff for interaction between QM and MM region (group-based cutoff).
+    _atomic_numbers: _np.ndarray(NATOMS)
+        Atomic numbers.
+    _qm_region: _np.ndarray(NATOMS)
+        Indices of the QM region.
+    _point_charges: _np.ndarray(NATOMS)
+        Point charges.
     """
 
     def __init__(
         self,
-        system,
-        context,
-        integrator,
-        topology,
-        qm_region,
-        qm_calculator,
-        reference_data=None,
-        cutoff=12.0,
-        horton_calculator=None,
-        energy_scale=1.0,
-        length_scale=1.0,
+        system: _mm.System,
+        context: _mm.Context,
+        integrator: _mm.Integrator,
+        topology: _mm.app.Topology,
+        qm_region: _np.ndarray,
+        cutoff: float = 12.0,
+        energy_scale: float = 1.0,
+        length_scale: float = 1.0,
     ):
         super().__init__(
             system=system,
             context=context,
             integrator=integrator,
             topology=topology,
-            reference_data=reference_data if reference_data else _ReferenceData(),
-            qm_calculator=qm_calculator,
-            horton_calculator=horton_calculator,
             energy_scale=energy_scale,
             length_scale=length_scale,
         )
-        # Specific to the MD sampler
+
         self._cutoff = cutoff
         self._atomic_numbers = _np.array(
             [atom.element.atomic_number for atom in topology.atoms()],
             dtype=_np.int64,
         )
         self._qm_region = _np.array(qm_region, dtype=_np.int64)
-
-        # Get the point charges
         self._point_charges = self._get_point_charges()
 
     def _wrap_positions(
@@ -169,18 +180,15 @@ class MDSampler(_BaseSampler):
         """
         with open(filename, "w") as f:
             f.write(f"{positions.shape[0]}\n")
-            f.write(f"Written by emle-spoke on {time.strftime('%Y-%m-%d %H:%M:%S')} \n")
+            f.write(
+                f"Written by emle-bespoke on {time.strftime('%Y-%m-%d %H:%M:%S')} \n"
+            )
             for element, position in zip(elements, positions):
                 f.write(f"{element} {position[0]} {position[1]} {position[2]}\n")
 
     def sample(
         self,
         n_steps: int,
-        calc_static: bool = True,
-        calc_induction: bool = True,
-        calc_horton: bool = True,
-        calc_polarizability: bool = True,
-        label: str = "",
     ) -> dict:
         """
         Sample the system for a given number of steps and calculate the necessary properties.
@@ -195,10 +203,6 @@ class MDSampler(_BaseSampler):
         e_static: float
             Static energy from the QM/MM calculation.
         """
-        assert (
-            self._horton_calculator is not None if calc_horton else True
-        ), "The horton calculator must be provided if the horton partitioning is to be calculated."
-
         _logger.debug("Sampling a new configuration.")
         _logger.debug(f"Number of integration steps: {n_steps}")
 
@@ -234,44 +238,15 @@ class MDSampler(_BaseSampler):
         # symbols_mm = [_ATOMIC_NUMBERS_TO_SYMBOLS[an.item()] for an in z_mm]
         # symbols = symbols_qm + symbols_mm
 
-        # Define the directory for vacuum calculations and QM/MM calculations
-        directory_vacuum = "vacuum" + label
-        directory_pc = "pc" + label
-
-        orca_blocks = "%MaxCore 1024\n%pal\nnprocs 2\nend\n"
-
         # Run the single point QM energy calculation
         charges_mm = self._point_charges[~molecule_mask][R_cutoff]
 
-        # Get the reference data
-        _, e_static, polarizability, horton_data, e_ind = self.get_reference_data(
-            pos_qm=pos_qm,
-            symbols_qm=symbols_qm,
-            pos_mm=pos_mm,
-            charges_mm=charges_mm,
-            directory_vacuum=directory_vacuum,
-            directory_pc=directory_pc,
-            orca_blocks=orca_blocks,
-            calc_static=calc_static,
-            calc_induction=calc_induction,
-            calc_horton=calc_horton,
-            calc_polarizability=calc_polarizability,
-        )
+        # Output dictionary
+        output_dict = {
+            "pos_qm": pos_qm,
+            "symbols_qm": symbols_qm,
+            "pos_mm": pos_mm,
+            "charges_mm": charges_mm,
+        }
 
-        _logger.debug(f"E(static) = {e_static}")
-        _logger.debug(f"E(induced) = {e_ind}")
-
-        # Add the reference data to the lists
-        self._reference_data.add_data_to_key("z", z_qm)
-        self._reference_data.add_data_to_key("xyz_qm", pos_qm * self._length_scale)
-        self._reference_data.add_data_to_key("alpha", polarizability)
-        self._reference_data.add_data_to_key("xyz_mm", pos_mm * self._length_scale)
-        self._reference_data.add_data_to_key("charges_mm", charges_mm)
-        self._reference_data.add_data_to_key("s", horton_data["s"])
-        self._reference_data.add_data_to_key("mu", horton_data["mu"])
-        self._reference_data.add_data_to_key("q_core", horton_data["q_core"])
-        self._reference_data.add_data_to_key("q_val", horton_data["q_val"])
-        self._reference_data.add_data_to_key("e_static", e_static)
-        self._reference_data.add_data_to_key("e_ind", e_ind)
-
-        return self._reference_data
+        return output_dict

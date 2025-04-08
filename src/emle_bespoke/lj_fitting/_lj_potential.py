@@ -1,6 +1,7 @@
 import openmm.unit as _unit
 import torch as _torch
 from loguru import logger as _logger
+from torch.utils.checkpoint import checkpoint as _checkpoint
 
 
 class LennardJonesPotential(_torch.nn.Module):
@@ -260,7 +261,9 @@ class LennardJonesPotential(_torch.nn.Module):
 
         return atom_type_to_index, sigma_init, epsilon_init, atom_type_ids, lj_params
 
-    def forward(self, xyz, solute_mask, solvent_mask, start_idx=0, end_idx=None):
+    def forward(
+        self, xyz, solute_mask, solvent_mask, start_idx=0, end_idx=None, checkpoint=True
+    ):
         """
         Calculate the Lennard-Jones potential energy for a set of positions.
 
@@ -277,65 +280,68 @@ class LennardJonesPotential(_torch.nn.Module):
         end_idx : int
             The end index for the batch.
 
-
         Returns
         -------
         torch.Tensor
             The total Lennard-Jones potential energy for each batch.
         """
+
+        def compute_energy(atom_type_ids, xyz, solute_mask, solvent_mask):
+            sigma = self._sigma_embedding(atom_type_ids).squeeze(-1)
+            epsilon = self._epsilon_embedding(atom_type_ids).squeeze(-1)
+
+            # Apply masks
+            solute_sigma = sigma * solute_mask
+            solvent_sigma = sigma * solvent_mask
+            solute_epsilon = _torch.abs(epsilon * solute_mask) + 1e-16
+            solvent_epsilon = _torch.abs(epsilon * solvent_mask) + 1e-16
+
+            xyz_qm = xyz * solute_mask.unsqueeze(-1)
+            xyz_mm = xyz * solvent_mask.unsqueeze(-1)
+
+            # Compute pairwise distances
+            distances = _torch.cdist(xyz_mm, xyz_qm)
+            distances = _torch.where(distances > 0, distances, 1e32)
+
+            # Reshape parameters for broadcasting
+            sigma_ij = 0.5 * (solvent_sigma[:, :, None] + solute_sigma[:, None, :])
+            epsilon_ij = _torch.sqrt(
+                solvent_epsilon[:, :, None] * solute_epsilon[:, None, :]
+            )
+
+            # Lennard-Jones potential
+            inv_r = sigma_ij / distances
+            inv_r6 = inv_r**6
+            inv_r12 = inv_r6 * inv_r6
+
+            # Compute the energy matrix
+            energy_matrix = (
+                4
+                * epsilon_ij
+                # * (inv_r12 - inv_r6)
+                * (-inv_r6)
+                * solvent_mask[:, :, None]
+                * solute_mask[:, None, :]
+            )
+
+            # Sum over all pairwise interactions
+            total_energy = _torch.sum(energy_matrix, dim=(1, 2))
+            return total_energy
+
+        # Apply checkpointing to the energy computation
         atom_type_ids = self._atom_type_ids[start_idx:end_idx]
-        sigma = self._sigma_embedding(atom_type_ids).squeeze(-1)
-        epsilon = self._epsilon_embedding(atom_type_ids).squeeze(-1)
 
-        # Apply masks
-        solute_sigma = sigma * solute_mask
-        solvent_sigma = sigma * solvent_mask
-        solute_epsilon = _torch.abs(epsilon * solute_mask) + 1e-16
-        solvent_epsilon = _torch.abs(epsilon * solvent_mask) + 1e-16
-
-        xyz_qm = xyz * solute_mask.unsqueeze(-1)
-        xyz_mm = xyz * solvent_mask.unsqueeze(-1)
-
-        # Compute pairwise distances
-        distances = _torch.cdist(xyz_mm, xyz_qm)
-        distances = _torch.where(distances > 0, distances, 1e32)
-
-        # Reshape parameters for broadcasting
-        sigma_ij = 0.5 * (solvent_sigma[:, :, None] + solute_sigma[:, None, :])
-        epsilon_ij = _torch.sqrt(
-            solvent_epsilon[:, :, None] * solute_epsilon[:, None, :]
-        )
-
-        # Lennard-Jones potential
-        inv_r = sigma_ij / distances
-        inv_r = inv_r
-        inv_r6 = inv_r**6
-        inv_r12 = inv_r6 * inv_r6
-        energy_matrix = (
-            4
-            * epsilon_ij
-            * (inv_r12 - inv_r6)
-            * solvent_mask[:, :, None]
-            * solute_mask[:, None, :]
-        )
-
-        # Sum over all pairwise interactions
-        total_energy = _torch.sum(energy_matrix, dim=(1, 2))
-        self._distances = distances * solvent_mask[:, :, None] * solute_mask[:, None, :]
-        self._sigmas = sigma
-        self._epsilons = epsilon
-        self._sigma_ij = sigma_ij
-        self._epsilon_ij = epsilon_ij
-        self._solvent_sigma = solvent_sigma
-        self._solute_sigma = solute_sigma
-        self._solvent_epsilon = solvent_epsilon
-        self._solute_epsilon = solute_epsilon
-        self._xyz_qm = xyz_qm
-        self._xyz_mm = xyz_mm
-        self._inv_r = inv_r
-        self._inv_r6 = inv_r6
-        self._inv_r12 = inv_r12
-        self._energy_matrix = energy_matrix
+        if checkpoint:
+            total_energy = _checkpoint(
+                compute_energy,
+                atom_type_ids,
+                xyz,
+                solute_mask,
+                solvent_mask,
+                use_reentrant=False,
+            )
+        else:
+            total_energy = compute_energy(atom_type_ids, xyz, solute_mask, solvent_mask)
 
         self.update_lj_parameters()
 

@@ -69,7 +69,9 @@ class LennardJonesPotential(_torch.nn.Module):
         _logger.debug("")
         _logger.debug("Lennard-Jones Parameters")
         _logger.debug("-" * 40)
-        _logger.debug(f"{'Atom Type':16s} | {'\u03c3 (nm)':>8s} | {'\u03b5 (kJ/mol)':>12s}")
+        _logger.debug(
+            f"{'Atom Type':16s} | {'\u03c3 (nm)':>8s} | {'\u03b5 (kJ/mol)':>12s}"
+        )
         _logger.debug("-" * 40)
         for atom in lj_params:
             sigma = lj_params[atom]["sigma"]

@@ -8,10 +8,10 @@ from loguru import logger as _logger
 
 from .._constants import ATOMIC_NUMBERS_TO_SYMBOLS as _ATOMIC_NUMBERS_TO_SYMBOLS
 from ..reference_data import ReferenceData as _ReferenceData
-from ._base import BaseSampler as _BaseSampler
+from ._base import Sampler as _Sampler
 
 
-class DimerSampler(_BaseSampler):
+class DimerSampler(_Sampler):
     def __init__(
         self,
         system,

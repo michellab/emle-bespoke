@@ -1,4 +1,5 @@
 """Miscellaneous utility functions for LJ fitting."""
+
 from typing import Any, List, Tuple, Union
 
 

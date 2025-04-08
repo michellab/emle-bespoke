@@ -30,9 +30,7 @@ class MonteCarloSampler:
             rand1 = np.random.rand()
             rand2 = np.random.rand()
         rand_h = 2 * np.sqrt(1.0 - (rand1**2 + rand2**2))
-        axis = np.array(
-            [rand1 * rand_h, rand2 * rand_h, 1 - 2 * (rand1**2 + rand2**2)]
-        )
+        axis = np.array([rand1 * rand_h, rand2 * rand_h, 1 - 2 * (rand1**2 + rand2**2)])
         axis /= np.linalg.norm(axis)
 
         # Get a random angle

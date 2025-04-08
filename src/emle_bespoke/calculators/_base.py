@@ -1,4 +1,5 @@
 """Base class for calculators."""
+
 import shutil as _shutil
 import subprocess as _subprocess
 from pathlib import Path as _Path
@@ -87,9 +88,9 @@ class QMCalculator(BaseCalculator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+
 class MBISCalculator(BaseCalculator):
     """Base class for MBIS calculators."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-

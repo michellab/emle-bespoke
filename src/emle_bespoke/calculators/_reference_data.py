@@ -194,7 +194,7 @@ class ReferenceDataCalculator:
             qm_mm_energy = self._qm_calculator.get_potential_energy(
                 elements=symbols_qm,
                 positions=pos_qm,
-                orca_external_potentials=external_potentials, # TODO: generalise
+                orca_external_potentials=external_potentials,  # TODO: generalise
                 directory=directory_pc,
             )
 
@@ -291,12 +291,12 @@ class ReferenceDataCalculator:
                 raise ValueError(
                     "pos_mm and charges_mm must be provided if calc_induction or calc_static is True."
                 )
-        
+
         # Get the vacuum energy
         vacuum_energy = self.get_single_point_energy(
             pos=pos_qm,
             symbols=symbols_qm,
-            directory=directory_vacuum, 
+            directory=directory_vacuum,
             calc_polarizability=calc_polarizability,
         )
 
@@ -326,7 +326,7 @@ class ReferenceDataCalculator:
             symbols_qm=symbols_qm,
             pos_mm=pos_mm,
             charges_mm=charges_mm,
-            directory_pc=directory_pc,            
+            directory_pc=directory_pc,
             vacuum_energy=vacuum_energy,
             e_static=e_static,
             calc_induction=calc_induction,
