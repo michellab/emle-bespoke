@@ -38,6 +38,7 @@ class ORCACalculator(BaseCalculator):
         self,
         name_prefix: Union[str, None] = None,
         orca_home: Union[str, None] = None,
+        orca_blocks: str = "%MaxCore 1024\n%pal\nnprocs 2\nend\n",
         energy_scale: float = HARTREE_TO_KJ_MOL,
     ):
         """
@@ -46,11 +47,12 @@ class ORCACalculator(BaseCalculator):
         self._name_prefix = name_prefix or self._NAME_PREFIX
         self._orca_home = orca_home or _os.environ.get("ORCA_HOME")
         self._energy_scale = energy_scale
+        self._orca_blocks = orca_blocks
 
         if not self._orca_home:
             raise ValueError("ORCA_HOME is not set.")
 
-        _logger.debug(f"Initialized ORCA calculator.")
+        _logger.debug("Initialized ORCA calculator.")
         _logger.debug(f"ORCA home: {self._orca_home}")
         _logger.debug(f"Name prefix: {self._name_prefix}")
         _logger.debug(f"Energy scale: {self._energy_scale}")
@@ -108,7 +110,7 @@ class ORCACalculator(BaseCalculator):
         file_path = _os.path.join(directory, output_file_name)
         try:
             polarizabilities = []
-            with open(file_path, "r") as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 for line in f:
                     if "THE POLARIZABILITY TENSOR" in line:
                         for _ in range(3):
@@ -231,10 +233,11 @@ class ORCACalculator(BaseCalculator):
         elements: list[str],
         positions: _np.ndarray,
         orca_simple_input: str = "! b3lyp cc-pvtz TightSCF NoFrozenCore KeepDens",
-        orca_blocks: str = "%pal nprocs 1 end",
+        orca_blocks: Union[str, None] = None,
         orca_external_potentials: Union[_np.ndarray, None] = None,
         charge: int = 0,
         multiplicity: int = 1,
+        calc_polarizability: bool = False,
         input_file_name: Union[str, None] = None,
         output_file_name: Union[str, None] = None,
         directory: str = ".",
@@ -273,8 +276,13 @@ class ORCACalculator(BaseCalculator):
         input_file_name = input_file_name or f"{self._name_prefix}.inp"
         output_file_name = output_file_name or f"{self._name_prefix}.out"
 
+        orca_blocks = orca_blocks or self._orca_blocks
+
         if orca_external_potentials is not None:
             orca_blocks += '\n%pointcharges "pointcharges.pc"\n'
+
+        if calc_polarizability:
+            orca_blocks += "%elprop\nPolar 1\ndipole true\nquadrupole true\nend\n"
 
         self.write_input_file(
             elements=elements,

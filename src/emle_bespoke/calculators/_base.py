@@ -79,3 +79,17 @@ class BaseCalculator:
 
     def get_polarizabilities(self, *args, **kwargs):
         raise NotImplementedError("get_polarizabilities method must be implemented.")
+
+
+class QMCalculator(BaseCalculator):
+    """Base class for QM calculators."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+class MBISCalculator(BaseCalculator):
+    """Base class for MBIS calculators."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+

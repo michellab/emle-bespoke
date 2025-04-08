@@ -38,7 +38,7 @@ class HortonCalculator(BaseCalculator):
         _logger.debug("Initialized HortonCalculator")
         _logger.debug(f"Name prefix: {self._name_prefix}")
 
-    def get_horton_partitioning(
+    def get_mbis_partitioning(
         self,
         input_file,
         directory=".",
