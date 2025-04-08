@@ -1,0 +1,8 @@
+sphinx>=4.5.0
+sphinx-rtd-theme>=1.0.0
+sphinx-autodoc-typehints>=1.18.3
+sphinx-copybutton>=0.5.0
+myst-parser>=0.18.1
+nbsphinx>=0.8.9
+ipython>=8.0.0
+jupyter>=1.0.0 
