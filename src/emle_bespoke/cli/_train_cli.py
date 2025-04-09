@@ -2,7 +2,6 @@
 
 import argparse
 import sys
-from typing import Any, Dict, Optional
 
 from loguru import logger as _logger
 
@@ -12,12 +11,14 @@ from .._log import log_termination as _log_termination
 
 
 def main() -> None:
+    """Main function for training and patching a bespoke EMLE model."""
+    _log_banner()
+
     parser = argparse.ArgumentParser(
         description="Generate reference data and train a bespoke EMLE model.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
-    # Command-line arguments
     parser.add_argument(
         "--reference-data",
         type=str,
@@ -116,6 +117,20 @@ def main() -> None:
     )
 
     parser.add_argument(
+        "--epochs-patch",
+        type=int,
+        default=1000,
+        help="The number of epochs to patch the model.",
+    )
+
+    parser.add_argument(
+        "--emle-model-filename",
+        type=str,
+        default=None,
+        help="The filename of the EMLE model to patch.",
+    )
+
+    parser.add_argument(
         "--skip-e-static",
         action="store_true",
         help="Skip fitting the static energy (fitted by default).",
@@ -151,21 +166,21 @@ def main() -> None:
         "--l2-reg-alpha",
         type=float,
         default=1.0,
-        help="The L2 regularization parameter for alpha.",
+        help="The L2 regularization parameter for alpha. Only used if e_ind is fitted during patching.",
     )
 
     parser.add_argument(
         "--l2-reg-s",
         type=float,
         default=1.0,
-        help="The L2 regularization parameter for s.",
+        help="The L2 regularization parameter for s. Only used if e_static is fitted during patching.",
     )
 
     parser.add_argument(
         "--l2-reg-q",
         type=float,
         default=1.0,
-        help="The L2 regularization parameter for q.",
+        help="The L2 regularization parameter for q. Only used if e_static is fitted during patching.",
     )
 
     parser.add_argument(
@@ -203,7 +218,6 @@ def main() -> None:
         _logger.error(f"Error parsing arguments: {e}")
         sys.exit(1)
 
-    _log_banner()
     _log_cli_args(args)
 
     # Only import required modules after argument parsing
@@ -214,11 +228,13 @@ def main() -> None:
     from emle.models import EMLEBase as _EMLEBase
     from emle.train._loss import QEqLoss as _QEqLoss
     from emle.train._loss import TholeLoss as _TholeLoss
-    from emle.train._utils import pad_to_max as _pad_to_max
 
     from ..train import EMLEPatched as _EMLEPatched
     from ..train import EMLETrainer as _EMLETrainer
     from ..train import PatchingLoss as _PatchingLoss
+    from ..utils import (
+        convert_reference_data_to_tensors as _convert_reference_data_to_tensors,
+    )
 
     # Load reference data
     if not _os.path.exists(args.reference_data):
@@ -240,36 +256,31 @@ def main() -> None:
         _logger.error(f"Error setting up device/dtype: {e}")
         raise
 
+    # Convert reference data to tensors
+    reference_data = _convert_reference_data_to_tensors(reference_data, device, dtype)
+
+    if args.emle_model_filename:
+        args.skip_training = True
+        _logger.info(
+            f"Loading EMLE model from {args.emle_model_filename} and patching... "
+            "Default training will be skipped."
+        )
+
+        if not _os.path.exists(args.emle_model_filename):
+            _logger.error(f"EMLE model file not found: {args.emle_model_filename}")
+            raise FileNotFoundError(
+                f"EMLE model file not found: {args.emle_model_filename}"
+            )
+
+        model_filename = args.emle_model_filename
+
     # Initialize trainer
     trainer = _EMLETrainer(
-        emle_base=_EMLEBase,
-        qeq_loss=_QEqLoss,
-        thole_loss=_TholeLoss,
-        patch_loss=_PatchingLoss,
+        emle_base=_EMLEBase,  # EMLE base reference for emle-engine
+        qeq_loss=_QEqLoss,  # QEq loss reference for emle-engine
+        thole_loss=_TholeLoss,  # Thole loss reference for emle-engine
+        patch_loss=_PatchingLoss,  # Patching loss reference for emle-bespoke
     )
-
-    # Convert reference data to tensors
-    reference_data_tensors = {}
-    for key, value in reference_data.items():
-        if not value:
-            continue
-        try:
-            if isinstance(value[0], (int, float)):
-                reference_data_tensors[key] = _torch.tensor(value).to(device)
-            else:
-                reference_data_tensors[key] = _pad_to_max(value).to(device)
-
-            if (
-                reference_data_tensors[key].dtype is _torch.float32
-                or reference_data_tensors[key].dtype is _torch.float64
-            ):
-                reference_data_tensors[key] = reference_data_tensors[key].to(dtype)
-
-        except Exception as e:
-            _logger.error(f"Error converting {key} to tensor: {e}")
-            raise
-
-    reference_data = reference_data_tensors
 
     # Train the model
     if not args.skip_training:
@@ -281,6 +292,8 @@ def main() -> None:
         for line in msg.split("\n"):
             _logger.info(line)
 
+        model_filename = args.filename_prefix + "_bespoke.mat"
+
         trainer.train(
             z=reference_data["z"],
             xyz=reference_data["xyz_qm"],
@@ -289,7 +302,7 @@ def main() -> None:
             q_val=reference_data["q_val"],
             alpha=reference_data["alpha"],
             train_mask=None,
-            model_filename=args.filename_prefix + "_bespoke.mat",
+            model_filename=model_filename,
             plot_data_filename=args.filename_prefix + "_bespoke_plot_data.mat",
             sigma=args.sigma,
             ivm_thr=args.ivm_thr,
@@ -312,16 +325,22 @@ def main() -> None:
         for line in msg.split("\n"):
             _logger.info(line)
 
+        if args.e_ind_param:
+            param_to_remove = "k_Z" if args.alpha_mode == "reference" else "sqrtk_ref"
+            try:
+                args.e_ind_param.remove(param_to_remove)
+            except ValueError:
+                pass
+
         if args.fit_e_total:
             opt_param_names = args.e_static_param + args.e_ind_param
 
-            if args.alpha_mode == "reference":
-                opt_param_names.remove("sqrtk_ref")
-            elif args.alpha_mode == "species":
-                opt_param_names.remove("k_Z")
-
             trainer.patch(
                 opt_param_names=opt_param_names,
+                emle_model_filename=model_filename,
+                alpha_mode=args.alpha_mode,
+                lr=args.lr_patch,
+                epochs=args.epochs_patch,
                 e_static_target=reference_data.get("e_static", None),
                 e_ind_target=reference_data.get("e_ind", None),
                 atomic_numbers=reference_data.get("z", None),
@@ -336,7 +355,11 @@ def main() -> None:
                 l2_reg_s=args.l2_reg_s,
                 l2_reg_q=args.l2_reg_q,
                 n_batches=args.n_batches,
-                filename_prefix=args.filename_prefix + "_patched",
+                filename_prefix=args.filename_prefix
+                + "_patched"
+                + f"_{args.alpha_mode}",
+                device=device,
+                dtype=dtype,
             )
         else:
             if not args.skip_e_static:
@@ -344,6 +367,10 @@ def main() -> None:
 
                 trainer.patch(
                     opt_param_names=opt_param_names,
+                    emle_model_filename=model_filename,
+                    alpha_mode=args.alpha_mode,
+                    lr=args.lr_patch,
+                    epochs=args.epochs_patch,
                     e_static_target=reference_data.get("e_static", None),
                     e_ind_target=None,
                     atomic_numbers=reference_data.get("z", None),
@@ -358,19 +385,22 @@ def main() -> None:
                     l2_reg_s=args.l2_reg_s,
                     l2_reg_q=args.l2_reg_q,
                     n_batches=args.n_batches,
-                    filename_prefix=args.filename_prefix + "_patched",
+                    filename_prefix=args.filename_prefix
+                    + "_patched"
+                    + f"_{args.alpha_mode}",
+                    device=device,
+                    dtype=dtype,
                 )
 
             if not args.skip_e_ind:
                 opt_param_names = args.e_ind_param
 
-                if args.alpha_mode == "reference":
-                    opt_param_names.remove("sqrtk_ref")
-                elif args.alpha_mode == "species":
-                    opt_param_names.remove("k_Z")
-
                 trainer.patch(
                     opt_param_names=opt_param_names,
+                    emle_model_filename=model_filename,
+                    alpha_mode=args.alpha_mode,
+                    lr=args.lr_patch,
+                    epochs=args.epochs_patch,
                     e_static_target=None,
                     e_ind_target=reference_data.get("e_ind", None),
                     atomic_numbers=reference_data.get("z", None),
@@ -385,7 +415,11 @@ def main() -> None:
                     l2_reg_s=0.0,
                     l2_reg_q=0.0,
                     n_batches=args.n_batches,
-                    filename_prefix=args.filename_prefix + "_patched",
+                    filename_prefix=args.filename_prefix
+                    + "_patched"
+                    + f"_{args.alpha_mode}",
+                    device=device,
+                    dtype=dtype,
                 )
 
     _log_termination()

@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional, Tuple
 import openmm as _mm
 import openmm.app as _app
 import openmm.unit as _unit
+import torch as _torch
 from loguru import logger as _logger
 from openff.interchange import Interchange as _Interchange
 from openff.interchange.components._packmol import UNIT_CUBE as _UNIT_CUBE
@@ -333,3 +334,53 @@ def write_system_to_xml(system: _mm.System, filename: str) -> None:
     """
     with open(filename, "w") as outfile:
         outfile.write(_mm.XmlSerializer.serialize(system))
+
+
+def convert_reference_data_to_tensors(
+    reference_data: dict, device: _torch.device, dtype: _torch.dtype
+) -> dict:
+    """
+    Convert reference data dictionary to PyTorch tensors.
+
+    Parameters
+    ----------
+    reference_data : dict
+        Dictionary containing reference data to convert.
+    device : torch.device
+        Device to place tensors on (CPU or GPU).
+    dtype : torch.dtype
+        Data type for floating point tensors (float32 or float64).
+
+    Returns
+    -------
+    dict
+        Dictionary with values converted to tensors on specified device and dtype.
+    """
+    from emle.train._utils import pad_to_max as _pad_to_max
+
+    reference_data_tensors = {}
+    for key, value in reference_data.items():
+        if not value:  # Skip empty/None values
+            continue
+
+        try:
+            if isinstance(value[0], (int, float)):
+                tensor = _torch.tensor(value)
+            else:
+                tensor = _pad_to_max(value)
+
+            tensor = tensor.to(device)
+
+            # Convert to appropriate dtype
+            if tensor.is_floating_point():
+                tensor = tensor.to(dtype)
+            elif tensor.dtype in (_torch.int32, _torch.int64):
+                tensor = tensor.to(_torch.long)
+
+            reference_data_tensors[key] = tensor
+
+        except Exception as e:
+            _logger.error(f"Failed to convert '{key}' to tensor: {e}")
+            raise
+
+    return reference_data_tensors

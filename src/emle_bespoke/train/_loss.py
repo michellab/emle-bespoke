@@ -70,7 +70,7 @@ class PatchingLoss(_BaseLoss):
         s: torch.Tensor, optional
             Static component for regularization (default: None).
         n_batches: int
-            Number of batches for splitting input.
+            Maximum number of batches for splitting input.
         """
         if e_static_target is None and e_ind_target is None:
             raise ValueError(
@@ -130,7 +130,7 @@ class PatchingLoss(_BaseLoss):
         # Compute loss
         loss = self._loss(values, target)
         loss += l2_reg
-        print(f"Loss: {loss.item()}, L2 Reg: {l2_reg.item()}")
+        # print(f"Loss: {loss.item()}, L2 Reg: {l2_reg.item()}")
 
         # Return metrics
         return (
@@ -152,13 +152,13 @@ class PatchingLoss(_BaseLoss):
     ):
         """Compute EMLE predictions in batches."""
         n_samples = atomic_numbers.shape[0]
-        batch_size = max(1, n_samples // n_batches)  # Avoid zero batch size
+        batch_size = max(1, n_samples // n_batches)
+        n_batches = n_samples // batch_size
 
         e_static_all, e_ind_all = [], []
         for i in range(n_batches):
             batch_start = i * batch_size
             batch_end = n_samples if i == n_batches - 1 else (i + 1) * batch_size
-
             e_static, e_ind = self._emle_model(
                 atomic_numbers[batch_start:batch_end],
                 charges_mm[batch_start:batch_end],
@@ -189,10 +189,10 @@ class PatchingLoss(_BaseLoss):
         mask = atomic_numbers > 0
         diff = q_target[mask] - (q_core_pred + q_val_pred)[mask]
 
-        avg_diff, max_diff, min_diff = diff.abs().mean(), diff.max(), diff.min()
-        print(
-            f"Q Regularization - Avg diff: {avg_diff:.4f}, Max diff: {max_diff:.4f}, Min diff: {min_diff:.4f}"
-        )
+        # avg_diff, max_diff, min_diff = diff.abs().mean(), diff.max(), diff.min()
+        # print(
+        #   f"Q Regularization - Avg diff: {avg_diff:.4f}, Max diff: {max_diff:.4f}, Min diff: {min_diff:.4f}"
+        # )
 
         return diff.square().mean() / q_target.std() ** 2
 
@@ -201,10 +201,10 @@ class PatchingLoss(_BaseLoss):
         mask = atomic_numbers > 0
         diff = s[mask] - s_pred[mask]
 
-        avg_diff, max_diff, min_diff = diff.abs().mean(), diff.max(), diff.min()
-        print(
-            f"S Regularization - Avg diff: {avg_diff:.4f}, Max diff: {max_diff:.4f}, Min diff: {min_diff:.4f}"
-        )
+        # avg_diff, max_diff, min_diff = diff.abs().mean(), diff.max(), diff.min()
+        # print(
+        #   f"S Regularization - Avg diff: {avg_diff:.4f}, Max diff: {max_diff:.4f}, Min diff: {min_diff:.4f}"
+        # )
 
         return diff.square().mean() / s.std() ** 2
 
@@ -215,10 +215,10 @@ class PatchingLoss(_BaseLoss):
         alpha_pred_triu = alpha_pred[:, triu_row, triu_col]
 
         diff = alpha_triu - alpha_pred_triu
-        avg_diff, max_diff, min_diff = diff.abs().mean(), diff.max(), diff.min()
-        print(
-            f"Alpha Regularization - Avg diff: {avg_diff:.4f}, Max diff: {max_diff:.4f}, Min diff: {min_diff:.4f}"
-        )
+        # avg_diff, max_diff, min_diff = diff.abs().mean(), diff.max(), diff.min()
+        # print(
+        #     f"Alpha Regularization - Avg diff: {avg_diff:.4f}, Max diff: {max_diff:.4f}, Min diff: {min_diff:.4f}"
+        # )
 
         return diff.square().mean() / alpha_triu.std() ** 2
 

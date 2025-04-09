@@ -20,7 +20,6 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
-    # Command-line arguments
     parser.add_argument(
         "--n-solute", type=int, default=1, help="Number of ligands in the system."
     )

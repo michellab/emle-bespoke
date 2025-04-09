@@ -55,6 +55,8 @@ class EMLETrainer(_EMLETrainer):
             raise TypeError("patch_loss must be a reference to PatchingLoss")
         self._patch_loss = patch_loss
 
+        self._emle_model = None
+
     @staticmethod
     def _patch_model(
         loss_class,
@@ -152,6 +154,8 @@ class EMLETrainer(_EMLETrainer):
     def patch(
         self,
         opt_param_names: list[str],
+        emle_model_filename: str,
+        alpha_mode: str,
         lr: float = 1e-3,
         epochs: int = 1000,
         e_static_target: Optional[_torch.Tensor] = None,
@@ -169,6 +173,8 @@ class EMLETrainer(_EMLETrainer):
         l2_reg_q: float = 1.0,
         n_batches: int = 32,
         filename_prefix: str = "patched_model",
+        device: _torch.device = _torch.device("cuda"),
+        dtype: _torch.dtype = _torch.float64,
     ) -> None:
         """
         Patch the EMLE model by training on target energies.
@@ -177,6 +183,14 @@ class EMLETrainer(_EMLETrainer):
         ----------
         opt_param_names : list[str]
             The names of the parameters to optimize.
+        emle_model_filename : str
+            The filename of the EMLE model to patch.
+        alpha_mode : str
+            The alpha mode to use for the EMLE model.
+        lr : float, default=1e-3
+            Learning rate for the patching.
+        epochs : int, default=1000
+            Number of epochs for the patching.
         e_static_target : torch.Tensor, optional
             Target static energy values, shape (n_samples,)
         e_ind_target : torch.Tensor, optional
@@ -208,11 +222,12 @@ class EMLETrainer(_EMLETrainer):
         filename_prefix : str, default="patched_model"
             Filename prefix to save patched model
         """
-        # Assign the current EMLE base to the EMLE model
-        emle_model = _EMLE(
-            model="ligand_bespoke.mat",
-            device=_torch.device("cuda"),
-            dtype=_torch.float64,
+        # Create the EMLE model from the filename provided
+        self._emle_model = _EMLE(
+            model=emle_model_filename,
+            alpha_mode=alpha_mode,
+            device=device,
+            dtype=dtype,
         )
 
         self._patch_model(
@@ -220,7 +235,7 @@ class EMLETrainer(_EMLETrainer):
             opt_param_names=opt_param_names,
             lr=lr,
             epochs=epochs,
-            emle_model=emle_model,
+            emle_model=self._emle_model,
             e_static_target=e_static_target,
             e_ind_target=e_ind_target,
             atomic_numbers=atomic_numbers,
@@ -250,23 +265,25 @@ class EMLETrainer(_EMLETrainer):
             The EMLE model dictionary.
         """
         emle_model = {
-            "q_core": self._emle_base._q_core,
-            "a_QEq": self._emle_base.a_QEq,
-            "a_Thole": self._emle_base.a_Thole,
-            "s_ref": self._emle_base.ref_values_s,
-            "chi_ref": self._emle_base.ref_values_chi,
-            "k_Z": self._emle_base.k_Z,
-            "sqrtk_ref": self._emle_base.ref_values_sqrtk,
+            "q_core": self._emle_model._emle_base._q_core,
+            "a_QEq": self._emle_model._emle_base.a_QEq,
+            "a_Thole": self._emle_model._emle_base.a_Thole,
+            "s_ref": self._emle_model._emle_base.ref_values_s,
+            "chi_ref": self._emle_model._emle_base.ref_values_chi,
+            "k_Z": self._emle_model._emle_base.k_Z,
+            "sqrtk_ref": self._emle_model._emle_base.ref_values_sqrtk
+            if self._emle_model._emle_base._alpha_mode == "reference"
+            else None,
             "species": [
-                i for i, val in enumerate(self._emle_base._species_map) if val != -1
+                i
+                for i, val in enumerate(self._emle_model._emle_base._species_map)
+                if val != -1
             ],
-            "n_ref": self._emle_base._n_ref,
-            "ref_aev": self._emle_base._ref_features,
-            "aev_mask": self._emle_base._emle_aev_computer._aev_mask,
-            "zid_map": self._emle_base._emle_aev_computer._zid_map,
-            "computer_n_species": len(self._emle_base._n_ref),
+            "n_ref": self._emle_model._emle_base._n_ref,
+            "ref_aev": self._emle_model._emle_base._ref_features,
+            "aev_mask": self._emle_model._emle_base._emle_aev_computer._mask,
+            "zid_map": self._emle_model._emle_base._emle_aev_computer._zid_map,
+            "computer_n_species": len(self._emle_model._emle_base._n_ref),
         }
 
-        print("Species: ", emle_model["species"])
-        exit()
         return emle_model
