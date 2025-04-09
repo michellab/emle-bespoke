@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "emle-bespoke"
 description = "A package for training and patching EMLE models, with routines for fitting LJ parameters. "
 requires-python = ">=3.10"
-keywords = ["free energy simulation", "free energy", "force field", "machine learning", "openmm"]
+keywords = ["emle", "electrostatic embedding", "qm/mm", "ml/mm", "molecular modelling", "machine learning", "openmm"]
 authors = [{email = "jmorado@ed.ac.uk"},{name = "Joao Morado"}]
 maintainers = [{name = "Joao Morado", email = "jmorado@ed.ac.uk"}]
 classifiers = [
@@ -15,7 +15,6 @@ classifiers = [
   "Intended Audience :: Developers",
   "Topic :: Scientific/Engineering",
   "Programming Language :: Python",
-  "Programming Language :: Python :: 3.10"
 ]
 
 dynamic = [
@@ -41,9 +40,8 @@ tests = [
 repository = "https://github.com/michellab/emle-bespoke"
 
 [project.scripts]
-emle-bespoke = "emle_bespoke.cli._sample_train:main"
-emle-bespoke-lj = "emle_bespoke.cli._sample_train_lj:main"
-emle-bespoke-train = "emle_bespoke.cli._train:main"
+emle-bespoke-sample = "emle_bespoke.cli._sample_cli:main"
+emle-bespoke-train = "emle_bespoke.cli._train_cli:main"
 
 [tool.coverage.run]
 source = ['src/emle_bespoke']
