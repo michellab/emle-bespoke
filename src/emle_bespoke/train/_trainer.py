@@ -151,11 +151,34 @@ class EMLETrainer(_EMLETrainer):
         _train_loop(model, optimizer, epochs, print_every, *args, **kwargs)
         return model
 
+    def set_emle_model(self, emle_model: _EMLE) -> None:
+        """
+        Set the EMLE model to use for patching.
+
+        Parameters
+        ----------
+        emle_model : EMLE
+            The EMLE model to use.
+        """
+        self._emle_model = emle_model
+
+    def get_emle_model(self) -> Optional[_EMLE]:
+        """
+        Get the current EMLE model.
+
+        Returns
+        -------
+        EMLE or None
+            The current EMLE model, or None if no model has been set.
+        """
+        return self._emle_model
+
     def patch(
         self,
         opt_param_names: list[str],
-        emle_model_filename: str,
-        alpha_mode: str,
+        emle_model: Optional[_EMLE] = None,
+        emle_model_filename: str = None,
+        alpha_mode: str = None,
         lr: float = 1e-3,
         epochs: int = 1000,
         e_static_target: Optional[_torch.Tensor] = None,
@@ -183,10 +206,12 @@ class EMLETrainer(_EMLETrainer):
         ----------
         opt_param_names : list[str]
             The names of the parameters to optimize.
-        emle_model_filename : str
-            The filename of the EMLE model to patch.
-        alpha_mode : str
-            The alpha mode to use for the EMLE model.
+        emle_model : EMLE, optional
+            An existing EMLE model to use. If provided, emle_model_filename and alpha_mode are ignored.
+        emle_model_filename : str, optional
+            The filename of the EMLE model to patch. Required if emle_model is not provided and no model exists.
+        alpha_mode : str, optional
+            The alpha mode to use for the EMLE model. Required if emle_model is not provided and no model exists.
         lr : float, default=1e-3
             Learning rate for the patching.
         epochs : int, default=1000
@@ -222,13 +247,20 @@ class EMLETrainer(_EMLETrainer):
         filename_prefix : str, default="patched_model"
             Filename prefix to save patched model
         """
-        # Create the EMLE model from the filename provided
-        self._emle_model = _EMLE(
-            model=emle_model_filename,
-            alpha_mode=alpha_mode,
-            device=device,
-            dtype=dtype,
-        )
+        # Use provided model, existing model, or create new one
+        if emle_model is not None:
+            self._emle_model = emle_model
+        elif self._emle_model is None:
+            if emle_model_filename is None or alpha_mode is None:
+                raise ValueError(
+                    "emle_model_filename and alpha_mode are required when no EMLE model exists"
+                )
+            self._emle_model = _EMLE(
+                model=emle_model_filename,
+                alpha_mode=alpha_mode,
+                device=device,
+                dtype=dtype,
+            )
 
         self._patch_model(
             loss_class=self._patch_loss,

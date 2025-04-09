@@ -350,6 +350,7 @@ def main() -> None:
             _logger.info("Patching model by fitting total energy (E_static + E_ind).")
             trainer.patch(
                 opt_param_names=opt_param_names,
+                emle_model=trainer.get_emle_model(),
                 emle_model_filename=model_filename,
                 alpha_mode=args.alpha_mode,
                 lr=args.lr_patch,
@@ -380,6 +381,7 @@ def main() -> None:
                 _logger.info("Patching model by fitting static energy.")
                 trainer.patch(
                     opt_param_names=opt_param_names,
+                    emle_model=trainer.get_emle_model(),
                     emle_model_filename=model_filename,
                     alpha_mode=args.alpha_mode,
                     lr=args.lr_patch,
@@ -410,6 +412,7 @@ def main() -> None:
                 _logger.info("Patching model by fitting induced energy.")
                 trainer.patch(
                     opt_param_names=opt_param_names,
+                    emle_model=trainer.get_emle_model(),
                     emle_model_filename=model_filename,
                     alpha_mode=args.alpha_mode,
                     lr=args.lr_patch,

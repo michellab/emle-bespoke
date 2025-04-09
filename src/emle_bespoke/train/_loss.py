@@ -217,7 +217,7 @@ class PatchingLoss(_BaseLoss):
         diff = alpha_triu - alpha_pred_triu
         # avg_diff, max_diff, min_diff = diff.abs().mean(), diff.max(), diff.min()
         # print(
-        #     f"Alpha Regularization - Avg diff: {avg_diff:.4f}, Max diff: {max_diff:.4f}, Min diff: {min_diff:.4f}"
+        #   f"Alpha Regularization - Avg diff: {avg_diff:.4f}, Max diff: {max_diff:.4f}, Min diff: {min_diff:.4f}"
         # )
 
         return diff.square().mean() / alpha_triu.std() ** 2
