@@ -1,6 +1,6 @@
 """Module containing the ReferenceDataCalculator class."""
 
-from typing import TYPE_CHECKING, Tuple
+from typing import Tuple
 
 import numpy as _np
 from loguru import logger as _logger

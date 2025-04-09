@@ -1,4 +1,4 @@
-"""Module for storing constants used in the emle_bespoke package."""
+"""Module for storing constants used in the emle-bespoke package."""
 
 ANGSTROM_TO_BOHR = 1.8897259886
 ANGSTROM_TO_NANOMETER = 0.1

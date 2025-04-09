@@ -1,3 +1,5 @@
+"""OpenMM-Torch force implementation for the EMLE model."""
+
 from typing import Optional
 
 import torch as _torch

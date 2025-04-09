@@ -1,3 +1,5 @@
+"""Module containing utility functions for the emle-bespoke package."""
+
 import re
 from copy import deepcopy
 from typing import Any, Dict, Optional, Tuple

@@ -1,3 +1,5 @@
+"""Module defining the ReferenceData class, the basic data structure for reference data in the emle-bespoke package."""
+
 import pickle
 from typing import Dict
 
