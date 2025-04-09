@@ -273,6 +273,8 @@ def main() -> None:
             )
 
         model_filename = args.emle_model_filename
+    else:
+        model_filename = None
 
     # Initialize trainer
     trainer = _EMLETrainer(
@@ -314,9 +316,20 @@ def main() -> None:
             device=device,
             dtype=dtype,
         )
+    else:
+        _logger.info("Skipping training of bespoke EMLE model.")
 
     # Patch the model if requested
     if args.patch:
+        if not model_filename:
+            msg = (
+                "EMLE model to patch is undefined. Either:\n"
+                "1. Provide an existing model via --emle-model-filename, or\n"
+                "2. Train a new model by removing --skip-training"
+            )
+            _logger.error(msg)
+            raise ValueError(msg)
+
         msg = r"""
 ╔════════════════════════════════════════════════════════════╗
 ║         Starting patching of bespoke EMLE model...         ║
@@ -334,7 +347,7 @@ def main() -> None:
 
         if args.fit_e_total:
             opt_param_names = args.e_static_param + args.e_ind_param
-
+            _logger.info("Patching model by fitting total energy (E_static + E_ind).")
             trainer.patch(
                 opt_param_names=opt_param_names,
                 emle_model_filename=model_filename,
@@ -364,7 +377,7 @@ def main() -> None:
         else:
             if not args.skip_e_static:
                 opt_param_names = args.e_static_param
-
+                _logger.info("Patching model by fitting static energy.")
                 trainer.patch(
                     opt_param_names=opt_param_names,
                     emle_model_filename=model_filename,
@@ -394,7 +407,7 @@ def main() -> None:
 
             if not args.skip_e_ind:
                 opt_param_names = args.e_ind_param
-
+                _logger.info("Patching model by fitting induced energy.")
                 trainer.patch(
                     opt_param_names=opt_param_names,
                     emle_model_filename=model_filename,
@@ -421,6 +434,8 @@ def main() -> None:
                     device=device,
                     dtype=dtype,
                 )
+    else:
+        _logger.info("Skipping patching of bespoke EMLE model.")
 
     _log_termination()
 

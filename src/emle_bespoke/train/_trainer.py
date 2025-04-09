@@ -252,6 +252,12 @@ class EMLETrainer(_EMLETrainer):
             n_batches=n_batches,
         )
 
+        # Update the EMLE model with the new parameters
+        self._patch_loss._update_s_gpr(self._emle_model._emle_base)
+        self._patch_loss._update_chi_gpr(self._emle_model._emle_base)
+        if self._emle_model._alpha_mode == "reference":
+            self._patch_loss._update_sqrtk_gpr(self._emle_model._emle_base)
+
         # Write the model to a file
         self._write_model_to_file(self.get_emle_model_dict(), f"{filename_prefix}.mat")
 
