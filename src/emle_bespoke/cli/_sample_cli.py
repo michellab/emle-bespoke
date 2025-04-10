@@ -51,6 +51,12 @@ def main():
     )
 
     parser.add_argument(
+        "--minimize",
+        action="store_true",
+        help="Whether to minimize the system before running the simulation.",
+    )
+
+    parser.add_argument(
         "--solute", type=str, default="c1ccccc1", help="The ligand SMILES string."
     )
     parser.add_argument(
@@ -248,6 +254,13 @@ def main():
         topology,
         alpha_mode=args.alpha_mode,
     )
+
+    # ------------------------------------------------------------------------- #
+    #                                 Minimization                              #
+    # ------------------------------------------------------------------------- #
+    if args.minimize:
+        _logger.info("Minimizing the system.")
+        simulation.minimizeEnergy(maxIterations=1000)
 
     # ------------------------------------------------------------------------- #
     #                               Equilibration                               #

@@ -28,6 +28,7 @@ class PatchingLoss(_BaseLoss):
         if not isinstance(loss, _torch.nn.Module):
             raise TypeError("loss must be an instance of torch.nn.Module")
         self._loss = loss
+        self._epsilon = 1e-16
 
     def forward(
         self,
@@ -114,29 +115,21 @@ class PatchingLoss(_BaseLoss):
         e_static = _torch.cat(e_static_all, dim=0)
         e_ind = _torch.cat(e_ind_all, dim=0)
 
-        if e_static_target is not None and e_ind_target is not None:
-            # Fit total energy Etot=Estatic+Einduced
-            target = e_static_target + e_ind_target
-            values = e_static + e_ind
-        elif e_static_target is not None:
-            # Fit only static component, Estatic
-            target = e_static_target
-            values = e_static
-        else:
-            # Fit only induced component, Einduced
-            target = e_ind_target
-            values = e_ind
+        # Prepare targets and values for loss calculation
+        target, values, target_orig, values_orig = self._prepare_targets_and_values(
+            e_static_target, e_ind_target, e_static, e_ind
+        )
 
         # Compute loss
         loss = self._loss(values, target)
-        loss += l2_reg
         # print(f"Loss: {loss.item()}, L2 Reg: {l2_reg.item()}")
+        loss += l2_reg
 
         # Return metrics
         return (
             loss,
-            self._get_rmse(values, target),
-            self._get_max_error(values, target),
+            self._get_rmse(values_orig, target_orig),
+            self._get_max_error(values_orig, target_orig),
         )
 
     def _update_emle_model_parameters(self):
@@ -228,14 +221,17 @@ class PatchingLoss(_BaseLoss):
         return s_pred
 
     def _prepare_targets_and_values(
-        self, e_static_target, e_ind_target, e_static, e_ind, fit_e_static, fit_e_ind
+        self, e_static_target, e_ind_target, e_static, e_ind
     ):
         """Prepare target and predicted values for loss calculation."""
-        target = (e_static_target if fit_e_static else 0) + (
-            e_ind_target if fit_e_ind else 0
+        target = (e_static_target if e_static_target is not None else 0) + (
+            e_ind_target if e_ind_target is not None else 0
         )
-        values = (e_static if fit_e_static else 0) + (e_ind if fit_e_ind else 0)
-        return target / target.std(), values / target.std(), target, values
+        values = (e_static if e_static_target is not None else 0) + (
+            e_ind if e_ind_target is not None else 0
+        )
+        std = target.std() + self._epsilon
+        return target / std, values / std, target, values
 
     @staticmethod
     def _get_alpha_mol(A_thole, mask):

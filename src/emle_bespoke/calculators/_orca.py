@@ -38,7 +38,7 @@ class ORCACalculator(BaseCalculator):
         self,
         name_prefix: Union[str, None] = None,
         orca_home: Union[str, None] = None,
-        orca_blocks: str = "%MaxCore 1024\n%pal\nnprocs 2\nend\n",
+        orca_blocks: str = "%MaxCore 1024\n%pal\nnprocs 8\nend\n",
         energy_scale: float = HARTREE_TO_KJ_MOL,
     ):
         """

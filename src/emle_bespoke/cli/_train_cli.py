@@ -158,7 +158,7 @@ def main() -> None:
     parser.add_argument(
         "--e-ind-param",
         type=lambda x: x.split(","),
-        default="a_Thole,k_Z,sqrtk_ref",
+        default="a_Thole,k_Z,ref_values_sqrtk",
         help="The parameters to fit for the induced energy, provided as comma-separated values.",
     )
 
@@ -339,7 +339,9 @@ def main() -> None:
             _logger.info(line)
 
         if args.e_ind_param:
-            param_to_remove = "k_Z" if args.alpha_mode == "reference" else "sqrtk_ref"
+            param_to_remove = (
+                "k_Z" if args.alpha_mode == "reference" else "ref_values_sqrtk"
+            )
             try:
                 args.e_ind_param.remove(param_to_remove)
             except ValueError:
