@@ -438,7 +438,6 @@ class LennardJonesPotential(_torch.nn.Module):
             4
             * epsilon_ij
             * (inv_r12 - inv_r6)
-            * (-inv_r6)
             * solvent_mask[:, :, None]
             * solute_mask[:, None, :]
         )

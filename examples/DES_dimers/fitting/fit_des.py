@@ -11,6 +11,7 @@ from openff.toolkit import (
 from torch.utils.data import DataLoader
 from tqdm import tqdm as _tqdm
 
+from emle_bespoke._constants import HARTREE_TO_KJ_MOL as _HARTREE_TO_KJ_MOL
 from emle_bespoke._log import _logger
 from emle_bespoke._log import log_banner as _log_banner
 from emle_bespoke._log import log_cli_args as _log_cli_args
@@ -87,7 +88,6 @@ def train_model(
             optimizer.zero_grad()
 
             for batch in dataloader:
-                print("batch keys: ", batch.keys())
                 loss, rmse, max_error = loss_instance(**batch)
                 loss.backward()
                 loss_total += loss.item()
@@ -99,6 +99,12 @@ def train_model(
             loss = loss_total / len(dataloader)
             rmse = rmse_total / len(dataloader)
             max_error = max(max_error_total)
+
+            print(
+                f"Epoch {epoch + 1}: Loss ={loss:9.4f}    "
+                f"RMSE ={rmse:9.4f}    "
+                f"Max Error ={max_error:9.4f}"
+            )
 
             loss_history.append(loss)
 
@@ -207,38 +213,31 @@ def main():
     )
 
     # Ensure reference data is on the correct device
+    del reference_data._data["zzz"]
     reference_data.to_tensors()  # Convert to tensors if not already
-    reference_data.rename_key("e_int", "e_int_target")
 
     # Create DataLoader for batch processing
     dataloader = DataLoader(
         reference_data,
         batch_size=args.batch_size,
         shuffle=False,
-        num_workers=0,  # Use 0 workers for now to debug
+        num_workers=0,
         pin_memory=device.type == "cpu",  # Only pin memory for CPU tensors  `
     )
 
     # Evaluate initial EMLE and LJ energies
-    results = {"e_static": [], "e_ind": [], "e_lj": [], "total_energy": []}
+    results = {"e_static": [], "e_ind": [], "e_lj": [], "e_int_target": []}
     print("Evaluating initial EMLE and LJ energies...")
     progress_bar = _tqdm(dataloader, desc="Processing batches")
     for batch_idx, batch in enumerate(progress_bar):
-        atomic_numbers = batch["atomic_numbers"] * batch["solute_mask"]
-        atomic_numbers = atomic_numbers[:, : batch["xyz_qm"].shape[1]]
-        charges_mm = batch["charges_mm"]
-        xyz_qm = batch["xyz_qm"]
-        xyz_mm = batch["xyz_mm"]
-
         with _torch.no_grad():
             # EMLE forward pass
             e_static, e_ind = emle(
-                atomic_numbers=atomic_numbers,
-                charges_mm=charges_mm,
-                xyz_qm=xyz_qm,
-                xyz_mm=xyz_mm,
+                atomic_numbers=batch["atomic_numbers"],
+                charges_mm=batch["charges_mm"],
+                xyz_qm=batch["xyz_qm"],
+                xyz_mm=batch["xyz_mm"],
             )
-
             # LJ forward pass
             e_lj = lj_potential(
                 xyz=batch["xyz"] * 0.1,
@@ -252,14 +251,28 @@ def main():
             f"Processing batch {batch_idx + 1}/{len(dataloader)}"
         )
 
-        results["e_static"].append(e_static.cpu().numpy())
-        results["e_ind"].append(e_ind.cpu().numpy())
+        results["e_static"].append(e_static.cpu().numpy() * _HARTREE_TO_KJ_MOL)
+        results["e_ind"].append(e_ind.cpu().numpy() * _HARTREE_TO_KJ_MOL)
         results["e_lj"].append(e_lj.cpu().numpy())
-        results["total_energy"].append((e_static + e_ind + e_lj).cpu().numpy())
+        results["e_int_target"].append(batch["e_int_target"].cpu().numpy())
 
     # Convert results to numpy arrays
     for key in results:
         results[key] = _np.concatenate(results[key])
+
+    results["e_int"] = results["e_static"] + results["e_ind"] + results["e_lj"]
+
+    mask = results["e_int_target"] < 0
+
+    import matplotlib.pyplot as _plt
+
+    _plt.plot(results["e_int_target"][mask], label="e_int_target")
+    _plt.plot(results["e_int"][mask], label="e_int")
+    _plt.plot(results["e_static"][mask], label="e_static")
+    _plt.plot(results["e_ind"][mask], label="e_ind")
+    _plt.plot(results["e_lj"][mask], label="e_lj")
+    _plt.legend()
+    _plt.savefig("energies.png")
 
     # Convert EMLE energies to tensors
     e_static_emle = _torch.tensor(

@@ -3,9 +3,7 @@
 
 import argparse
 import os as _os
-import pickle as _pkl
 import time as _time
-from collections import defaultdict
 from typing import Dict
 
 import numpy as _np
@@ -22,6 +20,8 @@ from openff.toolkit import (
     Topology as _Topology,
 )
 from rdkit import Chem as _Chem
+
+from emle_bespoke.reference_data import ReferenceDataset as _ReferenceDataset
 
 
 class DESDimerProcessor:
@@ -60,7 +60,7 @@ class DESDimerProcessor:
         self.reverse_order = reverse_order
         self.water_as_mol1 = water_as_mol1
         self.smiles_to_molecule = self._load_sdf_files()
-        self.processed_ds = defaultdict(list)
+        self.processed_ds = _ReferenceDataset()
 
     def _load_sdf_files(self) -> Dict[str, _Chem.Mol]:
         """Load SDF files into a dictionary mapping SMILES to RDKit molecules.
@@ -173,47 +173,27 @@ class DESDimerProcessor:
             print(f"Skipping system {system_id} as it doesn't contain water")
             return
 
-        # Get RDKit molecules
-        try:
-            rdmol0 = self.smiles_to_molecule[smiles0]
-            rdmol1 = self.smiles_to_molecule[smiles1]
-        except KeyError as e:
-            print(f"Skipping system {system_id} due to missing molecule: {e}")
-            return
-
-        # Check element consistency
-        symbols = [a.GetSymbol() for a in rdmol0.GetAtoms()] + [
-            a.GetSymbol() for a in rdmol1.GetAtoms()
-        ]
-        expected_elements = " ".join(symbols)
-        if str(elements) != expected_elements:
-            print(
-                f"Skipping system {system_id} due to element mismatch: expected {expected_elements}, got {elements}"
-            )
-            return
-
-        # Create OpenFF molecules
-        try:
-            mol0 = _Molecule.from_rdkit(
-                rdmol0, allow_undefined_stereo=True, hydrogens_are_explicit=True
-            )
-            mol1 = _Molecule.from_rdkit(
-                rdmol1, allow_undefined_stereo=True, hydrogens_are_explicit=True
-            )
-        except Exception as e:
-            print(f"Skipping system {system_id} due to molecule creation error: {e}")
-            return
-
-        # Store original order for coordinate handling
-        original_order = True
-        should_swap = False
+        # Determine which molecule should be solute (QM) and which should be solvent (MM)
+        # By default, mol0 is solute (QM) and mol1 is solvent (MM)
+        solute_smiles = smiles0
+        solvent_smiles = smiles1
+        solute_natoms = natoms0
+        solvent_natoms = natoms1
+        solute_charge = charge0
+        solvent_charge = charge1
+        needs_coord_swap = False  # Track if we need to swap coordinates
 
         # Handle water position if requested
         if self.water_as_mol1:
             if smiles0 == self.WATER_SMILES:
-                should_swap = True
+                # Swap to make water the solvent (MM)
+                solute_smiles, solvent_smiles = solvent_smiles, solute_smiles
+                solute_natoms, solvent_natoms = solvent_natoms, solute_natoms
+                solute_charge, solvent_charge = solvent_charge, solute_charge
+                needs_coord_swap = True
             elif smiles1 == self.WATER_SMILES:
-                should_swap = False
+                # Already correct, water is solvent (MM)
+                pass
             else:
                 print(
                     f"Skipping system {system_id} as water position cannot be determined"
@@ -222,19 +202,50 @@ class DESDimerProcessor:
 
         # Handle reverse order if requested
         if self.reverse_order:
-            should_swap = not should_swap
+            solute_smiles, solvent_smiles = solvent_smiles, solute_smiles
+            solute_natoms, solvent_natoms = solvent_natoms, solute_natoms
+            solute_charge, solvent_charge = solvent_charge, solute_charge
+            needs_coord_swap = not needs_coord_swap
 
-        # Swap molecules if needed
-        if should_swap:
-            original_order = False
-            mol0, mol1 = mol1, mol0
-            smiles0, smiles1 = smiles1, smiles0
-            natoms0, natoms1 = natoms1, natoms0
-            charge0, charge1 = charge1, charge0
+        if needs_coord_swap:
+            elements = elements.split()
+            elements = " ".join(elements[natoms0:]) + " " + " ".join(elements[:natoms0])
+
+        # Get RDKit molecules
+        try:
+            solute_rdmol = self.smiles_to_molecule[solute_smiles]
+            solvent_rdmol = self.smiles_to_molecule[solvent_smiles]
+        except KeyError as e:
+            print(f"Skipping system {system_id} due to missing molecule: {e}")
+            return
+
+        # Check element consistency
+        symbols = [a.GetSymbol() for a in solute_rdmol.GetAtoms()] + [
+            a.GetSymbol() for a in solvent_rdmol.GetAtoms()
+        ]
+        expected_elements = " ".join(symbols)
+        if str(elements) != expected_elements:
+            print(
+                f"Skipping system {system_id} due to element mismatch: expected {expected_elements}, got {elements}"
+            )
+            exit()
+            return
+
+        # Create OpenFF molecules
+        try:
+            solute_mol = _Molecule.from_rdkit(
+                solute_rdmol, allow_undefined_stereo=True, hydrogens_are_explicit=True
+            )
+            solvent_mol = _Molecule.from_rdkit(
+                solvent_rdmol, allow_undefined_stereo=True, hydrogens_are_explicit=True
+            )
+        except Exception as e:
+            print(f"Skipping system {system_id} due to molecule creation error: {e}")
+            return
 
         # Create topology and interchange
         try:
-            off_topology = _Topology.from_molecules([mol0, mol1])
+            off_topology = _Topology.from_molecules([solute_mol, solvent_mol])
             interchange = _Interchange.from_smirnoff(self.force_field, off_topology)
         except Exception as e:
             print(
@@ -243,14 +254,14 @@ class DESDimerProcessor:
             return
 
         # Pre-compute atomic numbers and masks
-        mol0_z = _np.array([a.GetAtomicNum() for a in rdmol0.GetAtoms()])
-        mol1_z = _np.array([a.GetAtomicNum() for a in rdmol1.GetAtoms()])
-        z = _np.concatenate([mol0_z, mol1_z])
+        solute_z = _np.array([a.GetAtomicNum() for a in solute_rdmol.GetAtoms()])
+        solvent_z = _np.array([a.GetAtomicNum() for a in solvent_rdmol.GetAtoms()])
+        z = _np.concatenate([solute_z, solvent_z])
 
-        mol0_mask = _np.zeros(len(z), dtype=bool)
-        mol0_mask[: len(mol0_z)] = True
-        mol1_mask = _np.zeros(len(z), dtype=bool)
-        mol1_mask[len(mol0_z) :] = True
+        solute_mask = _np.zeros(len(z), dtype=bool)
+        solute_mask[: len(solute_z)] = True
+        solvent_mask = _np.zeros(len(z), dtype=bool)
+        solvent_mask[len(solute_z) :] = True
 
         # Get charges from OpenMM system
         omm_system = interchange.to_openmm()
@@ -268,26 +279,64 @@ class DESDimerProcessor:
 
         # Process each configuration
         for _, row in df_filtered.iterrows():
+            # Get coordinates in original order (smiles0, smiles1)
             coords = _np.array([float(f) for f in row.xyz.split()]).reshape(
                 len(symbols), 3
             )
             energy = row["cbs_CCSD(T)_all"] * _mm.unit.kilocalories_per_mole
 
-            # Reorder coordinates if needed
-            if not original_order:
-                coords = _np.concatenate([coords[natoms1:], coords[:natoms1]])
+            # Reorder coordinates if needed to match solute/solvent ordering
+            if needs_coord_swap:
+                coords = _np.concatenate([coords[natoms0:], coords[:natoms0]])
 
-            self.processed_ds["e_int"].append(
-                energy.value_in_unit(_mm.unit.kilojoule_per_mole)
+            # Add data to ReferenceDataset
+            self.processed_ds.append(
+                {
+                    "e_int_target": energy.value_in_unit(_mm.unit.kilojoule_per_mole),
+                    "xyz_mm": coords[solvent_mask],  # Solvent (MM) coordinates
+                    "xyz_qm": coords[solute_mask],  # Solute (QM) coordinates
+                    "xyz": coords,
+                    "atomic_numbers": solute_z,  # Solute (QM) atomic numbers
+                    "zzz": z,
+                    "charges_mm": charges[solvent_mask],  # Solvent (MM) charges
+                    "solute_mask": solute_mask,  # Solute (QM) mask
+                    "solvent_mask": solvent_mask,  # Solvent (MM) mask
+                    "topology": off_topology,
+                }
             )
-            self.processed_ds["xyz_mm"].append(coords[mol0_mask])
-            self.processed_ds["xyz_qm"].append(coords[mol1_mask])
-            self.processed_ds["xyz"].append(coords)
-            self.processed_ds["atomic_numbers"].append(z)
-            self.processed_ds["charges_mm"].append(charges[mol0_mask])
-            self.processed_ds["solute_mask"].append(mol0_mask)
-            self.processed_ds["solvent_mask"].append(mol1_mask)
-            self.processed_ds["topology"].append(off_topology)
+
+    def write_xyz(self, processed_ds: _ReferenceDataset, filename: str) -> None:
+        """Write processed dataset to XYZ file.
+
+        Parameters
+        ----------
+        processed_ds : _ReferenceDataset
+            The processed dataset containing molecular configurations
+        filename : str
+            Path to the output XYZ file
+
+        Notes
+        -----
+        Writes molecular configurations in XYZ format with atomic coordinates and symbols.
+        Each frame includes the number of atoms and a comment line with the system index.
+        """
+        # Map atomic numbers to element symbols
+        ATOMIC_NUMBERS = {1: "H", 6: "C", 7: "N", 8: "O", 16: "S", 9: "F", 17: "Cl"}
+        with open(filename, "w") as f:
+            for i in range(len(processed_ds)):
+                xyz = processed_ds._data["xyz"][i]
+                atomic_numbers = processed_ds._data["zzz"][i]
+
+                # Write number of atoms and comment line
+                f.write(f"{len(xyz)}\n")
+                f.write(
+                    f"System {i + 1}, Energy: {processed_ds._data['e_int_target'][i]:.4f} kJ/mol\n"
+                )
+
+                # Write atomic coordinates with element symbols
+                for atom_id, (x, y, z) in enumerate(xyz):
+                    element = ATOMIC_NUMBERS.get(atomic_numbers[atom_id].item(), "X")
+                    f.write(f"{element:2s} {x:10.6f} {y:10.6f} {z:10.6f}\n")
 
     def process_csv(self, csv_file: str) -> None:
         """Process a CSV file containing DES dimer data.
@@ -301,7 +350,8 @@ class DESDimerProcessor:
         unique_ids = df["system_id"].unique()
 
         for system_id in unique_ids:
-            print(f"Processing system {system_id} out of {len(unique_ids)}")
+            print("--------------------------------")
+            print(f"Processing system {system_id}")
             df_filtered = df[df["system_id"] == system_id]
             row = df_filtered.iloc[0]
 
@@ -318,15 +368,15 @@ class DESDimerProcessor:
             )
 
     def save_results(self, output_file: str) -> None:
-        """Save processed results to a pickle file.
+        """Save processed results to a file.
 
         Parameters
         ----------
         output_file : str
-            Path to save the output pickle file.
+            Path to save the output file.
         """
-        with open(output_file, "wb") as f:
-            _pkl.dump(self.processed_ds, f)
+        print("Saving results to", output_file)
+        self.processed_ds.write(output_file)
 
 
 def main():
@@ -341,8 +391,8 @@ def main():
     parser.add_argument(
         "--output",
         type=str,
-        default="DES370K.pkl",
-        help="Path to save the output pickle file.",
+        default="DES370K.h5",
+        help="Path to save the output file.",
     )
     parser.add_argument(
         "--sdf-dir",
@@ -364,7 +414,7 @@ def main():
     parser.add_argument(
         "--reverse-order",
         action="store_true",
-        help="Reverse the order of molecules in the dimer.",
+        help="Reverse the order of molecules in the dimer. Performed after --water_as_mol1 if both are specified.",
     )
     parser.add_argument(
         "--water-as-mol1",
@@ -386,9 +436,10 @@ def main():
 
     processor.process_csv(args.csv)
     processor.save_results(args.output)
+    processor.write_xyz(processor.processed_ds, args.output.replace(".pkl", ".xyz"))
 
     print("\nProcessed data summary:")
-    print(f"Total frames: {len(processor.processed_ds['e_int'])}")
+    print(f"Total frames: {len(processor.processed_ds)}")
     print(f"Time taken: {_time.time() - time0:.2f} seconds")
 
 

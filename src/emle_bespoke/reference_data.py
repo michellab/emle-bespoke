@@ -213,6 +213,11 @@ class ReferenceDataset(_Dataset):
         """
         Write the reference data to a pickle file.
 
+        Notes
+        -----
+        This method simply writes the data dictionary to a pickle file.
+        It does not convert the data to tensors.
+
         Parameters
         ----------
         filename: str
@@ -223,20 +228,10 @@ class ReferenceDataset(_Dataset):
             filename = filename + ".pkl"
 
         try:
-            # Ensure all data is converted to tensors and padded
-            if self._tensors is None:
-                self._convert_to_tensors()
-
-            # Log shapes before writing
-            for key, tensor in self._tensors.items():
-                _logger.info(f"Writing tensor '{key}' with shape {tensor.shape}")
-
             with open(filename, "wb") as f:
-                _pkl.dump(self._tensors, f)
+                _pkl.dump(self._data, f)
 
-            _logger.info(
-                f"Successfully wrote {len(self._tensors)} tensors to pickle file"
-            )
+            _logger.info(f"Successfully wrote {len(self._data)} items to pickle file")
         except Exception as e:
             _logger.error(f"Error writing to pickle file {filename}: {e}")
             raise
