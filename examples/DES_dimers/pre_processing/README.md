@@ -13,7 +13,7 @@ The SDF files in the `SDFS` directory were downloaded from https://github.com/op
 
 ## DES Dimer Processing
 
-The main script `process_des.py` processes the DES370K dataset from an CSV file.
+The script `process_des.py` processes the DES370K dataset from an CSV file.
 
 
 ### Input Files
@@ -47,7 +47,7 @@ python final.py --csv <input_csv> [options]
 - `--sdf-dir`: Directory containing SDF files (default: "SDFS")
 - `--force-field`: Path to the force field file (default: "openff-2.0.0.offxml")
 - `--water-only`: Only process dimers containing water
-- `--reverse-order`: Reverse the order of monomers in the dimer
+- `--reverse-order`: Reverse the order of monomers in the dimer (`mol0` and `mol1` become the solvent and solute, respectively)
 - `--water-as-mol1`: Ensure water is always the solvent (second monomer, `mol1`) when present
 
 ### Examples
@@ -90,11 +90,9 @@ The script generates a pickle file containing the processed data with the follow
 - `solvent_mask`: Mask for the second monomer [boolean]
 - `topology`: OpenFF topology objects [OpenFF Topolgy]
 
-## Validation
+## Filtering
 
-The script performs several validation checks:
-1. Element validation: Only H, C, N, O, S are allowed (EMLE-supported elements)
-2. Charge validation: Both molecules must be neutral
-3. Water presence: If `--water-only` is set, at least one molecule must be water
-4. Element consistency: Elements in the CSV must match the SDF files
-5. Water position: If `--water-as-mol1` is set, water must be present
+The following filters are applied:
+
+1. Only dimers with H, C, N, O, S are allowed (EMLE-supported elements)
+2. Both molecules must be neutral

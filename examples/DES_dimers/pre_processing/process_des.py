@@ -4,9 +4,9 @@
 import argparse
 import os as _os
 import pickle as _pkl
+import time as _time
 from collections import defaultdict
 from typing import Dict
-import time as _time
 
 import numpy as _np
 import openmm as _mm
@@ -390,6 +390,7 @@ def main():
     print("\nProcessed data summary:")
     print(f"Total frames: {len(processor.processed_ds['e_int'])}")
     print(f"Time taken: {_time.time() - time0:.2f} seconds")
+
 
 if __name__ == "__main__":
     main()
