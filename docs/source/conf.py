@@ -2,22 +2,25 @@
 
 import os
 import sys
-sys.path.insert(0, os.path.abspath('../..'))
+
+sys.path.insert(0, os.path.abspath("../.."))
+
+from emle_bespoke._version import get_versions
 
 # Project information
-project = 'EMLE-Bespoke'
-copyright = '2024'
-author = 'EMLE-Bespoke Team'
-version = '0.1.0'
-release = '0.1.0'
+project = "emle-bespoke"
+copyright = "2025"
+author = "Joao Morado"
+version = get_versions()["version"]
+release = version
 
 # General configuration
 extensions = [
-    'sphinx.ext.autodoc',
-    'sphinx.ext.napoleon',
-    'sphinx.ext.viewcode',
-    'sphinx.ext.intersphinx',
-    'sphinx.ext.mathjax',
+    "sphinx.ext.autodoc",
+    "sphinx.ext.napoleon",
+    "sphinx.ext.viewcode",
+    "sphinx.ext.intersphinx",
+    "sphinx.ext.mathjax",
 ]
 
 # Napoleon settings
@@ -35,31 +38,45 @@ napoleon_use_rtype = True
 
 # Add mappings
 intersphinx_mapping = {
-    'python': ('https://docs.python.org/3', None),
-    'numpy': ('https://numpy.org/doc/stable/', None),
-    'torch': ('https://pytorch.org/docs/stable/', None),
+    "python": ("https://docs.python.org/3", None),
+    "numpy": ("https://numpy.org/doc/stable/", None),
+    "torch": ("https://pytorch.org/docs/stable/", None),
 }
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ['_templates']
+templates_path = ["_templates"]
 
 # The suffix of source filenames.
-source_suffix = '.rst'
+source_suffix = ".rst"
 
 # The master toctree document.
-master_doc = 'index'
+master_doc = "index"
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 exclude_patterns = []
 
 # The name of the Pygments (syntax highlighting) style to use.
-pygments_style = 'sphinx'
+pygments_style = "sphinx"
 
 # -- Options for HTML output -------------------------------------------------
 
 # The theme to use for HTML and HTML Help pages.
-html_theme = 'sphinx_rtd_theme'
+html_theme = "furo"
+
+# Theme options
+html_theme_options = {
+    "navigation_with_keys": True,
+    "top_of_page_button": "edit",
+    "source_repository": "https://github.com/joaomorado/emle-bespoke/",
+    "source_branch": "main",
+    "source_directory": "docs/source/",
+}
 
 # Add any paths that contain custom static files (such as style sheets)
-html_static_path = ['_static'] 
+html_static_path = ["_static"]
+
+# Autosummary settings
+autosummary_generate = True
+autosummary_imported_members = True
+autosummary_ignore_module_all = False
