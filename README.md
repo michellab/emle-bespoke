@@ -1,12 +1,19 @@
 # emle-bespoke
 
-A package for training and patching EMLE models, with routines for fitting LJ parameters.
+[![Documentation Status](https://github.com/michellab/emle-bespoke/actions/workflows/docs.yml/badge.svg)](https://michellab.github.io/emle-bespoke/)
+
+A package for training and patching bespoke EMLE models. Also includes routines for fitting and deriving EMLE-compatible Lennard-Jones parameters.
 
 ## Table of Contents
 
+1. [Documentation](#documentation)
 1. [Installation](#installation)
 1. [Usage](#usage)
 1. [Log Level](#log-level)
+
+## Documentation
+
+For detailed documentation, including API reference, tutorials, and examples, visit the [documentation website](https://michellab.github.io/emle-bespoke/).
 
 ## Installation
 
