@@ -2,9 +2,9 @@
 
 import torch as _torch
 from emle.models import EMLE as _EMLE
-from emle.train._loss import _BaseLoss
 
 from .._constants import HARTREE_TO_KJ_MOL
+from ._base import BaseLoss as _BaseLoss
 
 
 class PatchingLoss(_BaseLoss):
