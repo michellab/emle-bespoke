@@ -9,13 +9,17 @@ This module provides loss functions for training the EMLE patched model, includi
 from typing import Optional, Tuple
 
 import numpy as _np
+import openmm.unit as _unit
 import torch as _torch
 from emle.models import EMLE as _EMLE
 from emle.train._loss import _BaseLoss
 from loguru import logger as _logger
 
-from .._constants import ANGSTROM_TO_NANOMETER, HARTREE_TO_KJ_MOL
+from .._constants import HARTREE_TO_KJ_MOL
 from ._lj_potential import LennardJonesPotential as _LennardJonesPotential
+from ._lj_potential_efficient import (
+    LennardJonesPotentialEfficient as _LennardJonesPotentialEfficient,
+)
 
 
 class WeightedMSELoss(_torch.nn.Module):
@@ -116,8 +120,9 @@ class InteractionEnergyLoss(_BaseLoss):
         lj_potential: _LennardJonesPotential,
         loss: _torch.nn.Module = WeightedMSELoss(),
         weighting_method: str = "uniform",
-        e_static_emle: _torch.Tensor = None,
-        e_ind_emle: _torch.Tensor = None,
+        temperature: float = 300.0,
+        e_static_emle: Optional[_torch.Tensor] = None,
+        e_ind_emle: Optional[_torch.Tensor] = None,
         l2_reg: float = 1.0,
     ) -> None:
         """
@@ -134,6 +139,8 @@ class InteractionEnergyLoss(_BaseLoss):
         weighting_method : str, optional
             The method used for weighting the energy contributions.
             Options: "boltzmann", "uniform", "non-boltzmann". Default is "uniform".
+        temperature : float, optional
+            Temperature in Kelvin for Boltzmann weighting. Default is 300.0.
         e_static_emle : _torch.Tensor, optional
             Static EMLE energies.
         e_ind_emle : _torch.Tensor, optional
@@ -147,8 +154,12 @@ class InteractionEnergyLoss(_BaseLoss):
             raise TypeError("emle_model must be an instance of EMLE")
         self._emle_model = emle_model
 
-        if not isinstance(lj_potential, _LennardJonesPotential):
-            raise TypeError("lj_potential must be an instance of LennardJonesPotential")
+        if not isinstance(
+            lj_potential, (_LennardJonesPotential, _LennardJonesPotentialEfficient)
+        ):
+            raise TypeError(
+                "lj_potential must be an instance of LennardJonesPotential or LennardJonesPotentialEfficient"
+            )
         self._lj_potential = lj_potential
 
         if not isinstance(loss, _torch.nn.Module):
@@ -164,6 +175,17 @@ class InteractionEnergyLoss(_BaseLoss):
             )
         self._weighting_method = weighting_method
 
+        if not isinstance(temperature, (int, float)):
+            raise TypeError("temperature must be a number")
+        if temperature <= 0:
+            raise ValueError("temperature must be positive")
+        self._temperature = temperature * _unit.kelvin
+        self._kBT = (
+            _unit.BOLTZMANN_CONSTANT_kB
+            * _unit.AVOGADRO_CONSTANT_NA
+            * self._temperature
+            / _unit.kilojoules_per_mole
+        )
         if not isinstance(l2_reg, (int, float)):
             raise TypeError("l2_reg must be a number")
         if l2_reg < 0:
@@ -196,7 +218,7 @@ class InteractionEnergyLoss(_BaseLoss):
         xyz: _torch.Tensor,
         solute_mask: _torch.Tensor,
         solvent_mask: _torch.Tensor,
-        indices: Optional[Tuple[int, int]] = None,
+        indices: Optional[_torch.Tensor] = None,
     ) -> Tuple[_torch.Tensor, float, float]:
         """
         Calculate the total loss including energy fitting and regularization.
@@ -210,17 +232,17 @@ class InteractionEnergyLoss(_BaseLoss):
         charges_mm : _torch.Tensor
             MM point charges in atomic units.
         xyz_qm : _torch.Tensor
-            QM atom positions in nanometers.
+            QM atom positions in Angstrom.
         xyz_mm : _torch.Tensor
-            MM atom positions in nanometers.
+            MM atom positions in Angstrom.
         xyz : _torch.Tensor
-            Combined atom positions in nanometers.
+            Combined atom positions in Angstrom.
         solute_mask : _torch.Tensor
             Mask for solute atoms.
         solvent_mask : _torch.Tensor
             Mask for solvent atoms.
-        indices : Optional[Tuple[int, int]], optional
-            Start and end indices for batch processing. If None, processes all data.
+        indices : Optional[_torch.Tensor], optional
+            Indices of the topologies for which to compute the energy. If None, processes all data.
 
         Returns
         -------
@@ -230,12 +252,6 @@ class InteractionEnergyLoss(_BaseLoss):
             - RMSE of the energy prediction
             - Maximum absolute error
         """
-        # Determine batch indices
-        if indices is not None:
-            start_idx, end_idx = indices[0], indices[-1] + 1
-        else:
-            start_idx, end_idx = 0, None
-
         # Calculate predicted energies
         e_static, e_ind, e_lj = self._compute_predictions(
             atomic_numbers=atomic_numbers,
@@ -245,8 +261,7 @@ class InteractionEnergyLoss(_BaseLoss):
             xyz=xyz,
             solute_mask=solute_mask,
             solvent_mask=solvent_mask,
-            start_idx=start_idx,
-            end_idx=end_idx,
+            indices=indices,
         )
 
         # Calculate total predicted energy
@@ -256,8 +271,8 @@ class InteractionEnergyLoss(_BaseLoss):
         # Calculate base loss
         if isinstance(self._loss, WeightedMSELoss):
             weights = self._calculate_weights(
-                e_int_target, values, self._weighting_method
-            ).to(e_int_target.device)
+                target, values, self._weighting_method
+            ).to(target.device)
             loss = self._loss(values, target, weights)
         elif isinstance(self._loss, _torch.nn.MSELoss):
             loss = self._loss(values, target)
@@ -283,8 +298,7 @@ class InteractionEnergyLoss(_BaseLoss):
         xyz: _torch.Tensor,
         solute_mask: _torch.Tensor,
         solvent_mask: _torch.Tensor,
-        start_idx: int = 0,
-        end_idx: Optional[int] = None,
+        indices: _torch.Tensor,
     ) -> Tuple[_torch.Tensor, _torch.Tensor, _torch.Tensor]:
         """
         Calculate predicted interaction energies from EMLE and LJ components.
@@ -296,19 +310,17 @@ class InteractionEnergyLoss(_BaseLoss):
         charges_mm : _torch.Tensor
             MM point charges in atomic units.
         xyz_qm : _torch.Tensor
-            QM atom positions in nanometers.
+            QM atom positions in Angstrom.
         xyz_mm : _torch.Tensor
-            MM atom positions in nanometers.
+            MM atom positions in Angstrom.
         xyz : _torch.Tensor
-            Combined atom positions in nanometers.
+            Combined atom positions in Angstrom.
         solute_mask : _torch.Tensor
             Mask for solute atoms.
         solvent_mask : _torch.Tensor
             Mask for solvent atoms.
-        start_idx : int, optional
-            Start index for batch processing. Default is 0.
-        end_idx : Optional[int], optional
-            End index for batch processing. If None, processes until the end.
+        indices : _torch.Tensor
+            Indices of the topologies for which to compute the energy.
 
         Returns
         -------
@@ -328,27 +340,26 @@ class InteractionEnergyLoss(_BaseLoss):
             solvent_mask = solvent_mask.unsqueeze(0)
             solute_mask = solute_mask.unsqueeze(0)
 
-        # Calculate or retrieve EMLE energies
+        # Calculate or retrieve EMLE energies.
         if self._e_static_emle is None or self._e_ind_emle is None:
             e_static, e_ind = self._emle_model.forward(
                 atomic_numbers,
                 charges_mm,
-                xyz_qm / ANGSTROM_TO_NANOMETER,
-                xyz_mm / ANGSTROM_TO_NANOMETER,
+                xyz_qm,
+                xyz_mm,
             )
             e_static = e_static * HARTREE_TO_KJ_MOL
             e_ind = e_ind * HARTREE_TO_KJ_MOL
         else:
-            e_static = self._e_static_emle[start_idx:end_idx]
-            e_ind = self._e_ind_emle[start_idx:end_idx]
+            e_static = self._e_static_emle[indices]
+            e_ind = self._e_ind_emle[indices]
 
         # Calculate LJ potential energy
         e_lj = self._lj_potential.forward(
             xyz,
             solute_mask=solute_mask,
             solvent_mask=solvent_mask,
-            start_idx=start_idx,
-            end_idx=end_idx,
+            indices=indices,
         )
 
         return e_static, e_ind, e_lj
@@ -407,12 +418,12 @@ class InteractionEnergyLoss(_BaseLoss):
             If an invalid weighting method is specified.
         """
         if method == "boltzmann":
-            if self._weights is None:
-                self._weights = self._calculate_boltzmann_weights(e_int_target)
+            # if self._weights is None:
+            self._weights = self._calculate_boltzmann_weights(e_int_target)
             return self._weights
         elif method == "uniform":
-            if self._weights is None:
-                self._weights = self._calculate_uniform_weights(e_int_target)
+            # if self._weights is None:
+            self._weights = self._calculate_uniform_weights(e_int_target)
             return self._weights
         elif method == "non-boltzmann":
             return self._calculate_non_boltzmann_weights(e_int_target, e_int_predicted)
@@ -420,7 +431,7 @@ class InteractionEnergyLoss(_BaseLoss):
             raise ValueError(f"Invalid weighting method: {method}")
 
     def _calculate_boltzmann_weights(
-        self, e_int_target: _torch.Tensor, temperature: float = 500.0
+        self, e_int_target: _torch.Tensor
     ) -> _torch.Tensor:
         """
         Calculate Boltzmann weights for energy fitting.
@@ -429,53 +440,14 @@ class InteractionEnergyLoss(_BaseLoss):
         ----------
         e_int_target : _torch.Tensor
             Target interaction energies.
-        temperature : float, optional
-            Temperature in Kelvin for Boltzmann weighting. Default is 500.0.
 
         Returns
         -------
         _torch.Tensor
             Normalized Boltzmann weights.
         """
-        import openmm.unit as _unit
-
-        kBT = (
-            _unit.BOLTZMANN_CONSTANT_kB
-            * _unit.AVOGADRO_CONSTANT_NA
-            * temperature
-            * _unit.kelvin
-            / _unit.kilojoules_per_mole
-        )
-
-        weights = _torch.zeros_like(e_int_target)
-        window_sizes = self._lj_potential._windows
-        frame = 0
-
-        for size in window_sizes:
-            window_end = frame + size
-            e_int_target_window = e_int_target[frame:window_end]
-            window_weights = _torch.ones_like(e_int_target_window)
-
-            # Define energy thresholds
-            mask_uniform = e_int_target_window < 4.184  # 1 kcal/mol
-            mask_filter = e_int_target_window > 5 * 4.184  # 5 kcal/mol
-            mask_middle = ~mask_uniform & ~mask_filter
-
-            # Apply weighting scheme
-            window_weights[mask_filter] = 0.0
-            window_weights[mask_middle] = 1.0 / _torch.sqrt(
-                1 + (e_int_target_window[mask_middle] / 4.184 - 1) ** 2
-            )
-
-            # Normalize weights
-            total_weight = window_weights.sum()
-            if total_weight > 0:
-                window_weights /= total_weight
-
-            weights[frame:window_end] = window_weights
-            frame = window_end
-
-        return weights
+        weights = _torch.exp(-e_int_target / self._kBT)
+        return weights / weights.sum()
 
     def _calculate_uniform_weights(self, e_int_target: _torch.Tensor) -> _torch.Tensor:
         """
@@ -491,7 +463,8 @@ class InteractionEnergyLoss(_BaseLoss):
         _torch.Tensor
             Normalized uniform weights.
         """
-        return _torch.ones_like(e_int_target)
+        weights = _torch.ones_like(e_int_target)
+        return weights / weights.sum()
 
     def _calculate_non_boltzmann_weights(
         self, e_int_target: _torch.Tensor, e_int_predicted: _torch.Tensor
@@ -509,16 +482,7 @@ class InteractionEnergyLoss(_BaseLoss):
         Returns
         -------
         _torch.Tensor
-            Normalized non-Boltzmann weights.
+            Non-Boltzmann weights.
         """
-        import openmm.unit as _unit
-
-        temperature = 300.0 * _unit.kelvin
-        kBT = (
-            _unit.BOLTZMANN_CONSTANT_kB
-            * _unit.AVOGADRO_CONSTANT_NA
-            * temperature
-            / _unit.kilojoules_per_mole
-        )
-        weights = _torch.exp(-(e_int_target - e_int_predicted) / kBT)
+        weights = _torch.exp(-(e_int_target - e_int_predicted) / self._kBT)
         return weights / weights.sum()
