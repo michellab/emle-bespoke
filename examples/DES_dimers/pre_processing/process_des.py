@@ -196,9 +196,8 @@ class DESDimerProcessor:
                 pass
             else:
                 print(
-                    f"Skipping system {system_id} as water position cannot be determined"
+                    f"Cannot determine water position for system {system_id}, but --water-as-mol1 is set to True. Continuing..."
                 )
-                return
 
         # Handle reverse order if requested
         if self.reverse_order:
