@@ -557,7 +557,6 @@ def main():
         }
         fixed_lj_energies = {"e_lj": initial_energies["e_lj"]}
 
-        # --- Optimization Strategy Logic (Refactored) ---
         if args.opt_strategy == "simultaneous":
             lj_model, emle_model = _run_simultaneous_optimization(
                 lj_params_to_fit,
@@ -566,7 +565,6 @@ def main():
                 emle_model,
                 args,
                 dataloader,
-                device,
             )
 
         elif args.opt_strategy == "lj-then-emle":

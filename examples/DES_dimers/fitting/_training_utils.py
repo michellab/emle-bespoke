@@ -3,6 +3,7 @@ import os as _os
 import torch as _torch
 from loguru import logger as _logger
 
+
 def train_model(
     loss_class,
     opt_param_names,
@@ -80,7 +81,7 @@ def train_model(
             e_int_target = _torch.cat([batch["e_int_target"] for batch in dataloader])
             loss_instance.precompute_weights(
                 e_int_target=e_int_target,
-                e_int_predicted=None,  
+                e_int_predicted=None,
             )
 
         for epoch in range(epochs):
@@ -93,11 +94,9 @@ def train_model(
 
             for batch_idx, batch in enumerate(dataloader):
                 loss, rmse, max_error = loss_instance(**batch)
-                loss = loss / accumulation_steps  
+                loss = loss / accumulation_steps
                 loss.backward(retain_graph=True)
-                loss_total += (
-                    loss.item() * accumulation_steps
-                )  
+                loss_total += loss.item() * accumulation_steps
                 rmse_total += rmse.item()
                 max_error_total.append(max_error.item())
 
@@ -165,7 +164,7 @@ def train_model(
         else:
             _logger.warning("No best model state found to restore. Using final state.")
 
-        return best_loss  
+        return best_loss
 
     loss_instance = loss_class(**(loss_class_kwargs or {}))
 
@@ -184,7 +183,11 @@ def train_model(
             # Direct match (e.g., 'a_QEq') or specific LJ/EMLE parameter name, or part of the name
             # TODO: improve this
             name_parts = name.split(".", 1)[-1]
-            if name == opt_name or name.endswith(f"{opt_name}") or opt_name in name_parts:
+            if (
+                name == opt_name
+                or name.endswith(f"{opt_name}")
+                or opt_name in name_parts
+            ):
                 is_optimizable = True
                 break
 
@@ -197,14 +200,14 @@ def train_model(
                     f"Parameter {name} specified for optimization but requires_grad=False. Skipping."
                 )
         else:
-            param.requires_grad_(False)  
+            param.requires_grad_(False)
             _logger.debug(f"Freezing parameter: {name}")
 
     if not opt_parameters:
         _logger.error(
             "No parameters found for optimization based on the provided names. Stopping training."
         )
-        return loss_instance  
+        return loss_instance
 
     _logger.info(f"Optimizing parameters: {opt_param_names}")
 
@@ -222,10 +225,9 @@ def train_model(
         save_checkpoints,
         accumulation_steps,
         *args,
-        **kwargs,  
+        **kwargs,
     )
-
 
     loss_instance.eval()
 
-    return loss_instance  
+    return loss_instance
