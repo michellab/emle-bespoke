@@ -23,11 +23,11 @@ class PatchingLoss(_BaseLoss):
         if not isinstance(emle_model, _EMLE):
             raise TypeError("emle_model must be an instance of EMLE")
 
-        self._emle_model = emle_model
+        self.emle_model = emle_model
 
         if not isinstance(loss, _torch.nn.Module):
             raise TypeError("loss must be an instance of torch.nn.Module")
-        self._loss = loss
+        self.loss = loss
         self._epsilon = 1e-16
 
     def forward(
@@ -121,7 +121,7 @@ class PatchingLoss(_BaseLoss):
         )
 
         # Compute loss
-        loss = self._loss(values, target)
+        loss = self.loss(values, target)
         # print(f"Loss: {loss.item()}, L2 Reg: {l2_reg.item()}")
         loss += l2_reg
 
@@ -134,10 +134,10 @@ class PatchingLoss(_BaseLoss):
 
     def _update_emle_model_parameters(self):
         """Update EMLE model parameters."""
-        base = self._emle_model._emle_base
+        base = self.emle_model._emle_base
         self._update_s_gpr(base)
         self._update_chi_gpr(base)
-        if self._emle_model._alpha_mode == "reference":
+        if self.emle_model._alpha_mode == "reference":
             self._update_sqrtk_gpr(base)
 
     def _compute_emle_predictions(
@@ -152,7 +152,7 @@ class PatchingLoss(_BaseLoss):
         for i in range(n_batches):
             batch_start = i * batch_size
             batch_end = n_samples if i == n_batches - 1 else (i + 1) * batch_size
-            e_static, e_ind = self._emle_model(
+            e_static, e_ind = self.emle_model(
                 atomic_numbers[batch_start:batch_end],
                 charges_mm[batch_start:batch_end],
                 xyz_qm[batch_start:batch_end],
@@ -169,7 +169,7 @@ class PatchingLoss(_BaseLoss):
         q_mol = _torch.zeros(
             len(atomic_numbers), dtype=_torch.float64, device=atomic_numbers.device
         )
-        s_pred, q_core_pred, q_val_pred, a_Thole_pred = self._emle_model._emle_base(
+        s_pred, q_core_pred, q_val_pred, a_Thole_pred = self.emle_model._emle_base(
             atomic_numbers, xyz_qm, q_mol
         )
         return s_pred, q_core_pred, q_val_pred, a_Thole_pred
@@ -217,7 +217,7 @@ class PatchingLoss(_BaseLoss):
 
     def _predict_s_component(self, atomic_numbers, xyz_qm, q_mol):
         """Helper function to predict s component using the EMLE base model."""
-        s_pred, _, _, _ = self._emle_model._emle_base(atomic_numbers, xyz_qm, q_mol)
+        s_pred, _, _, _ = self.emle_model._emle_base(atomic_numbers, xyz_qm, q_mol)
         return s_pred
 
     def _prepare_targets_and_values(

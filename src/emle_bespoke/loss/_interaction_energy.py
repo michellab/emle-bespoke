@@ -33,11 +33,11 @@ class InteractionEnergyLoss(_BaseLoss):
 
     Attributes
     ----------
-    _emle_model : _EMLE
+    emle_model : _EMLE
         The EMLE model for computing static and induced energies.
-    _lj_potential : _LennardJonesPotential
+    lj_potential : _LennardJonesPotential
         The Lennard-Jones potential for computing LJ energies.
-    _loss : _torch.nn.Module
+    loss : _torch.nn.Module
         The base loss function (e.g., WeightedMSELoss).
     _e_static_emle : _torch.Tensor or None
         Cached static EMLE energies.
@@ -84,7 +84,7 @@ class InteractionEnergyLoss(_BaseLoss):
 
         if not isinstance(emle_model, _EMLE):
             raise TypeError("emle_model must be an instance of EMLE")
-        self._emle_model = emle_model
+        self.emle_model = emle_model
 
         if not isinstance(
             lj_potential, (_LennardJonesPotential, _LennardJonesPotentialEfficient)
@@ -92,11 +92,11 @@ class InteractionEnergyLoss(_BaseLoss):
             raise TypeError(
                 "lj_potential must be an instance of LennardJonesPotential or LennardJonesPotentialEfficient"
             )
-        self._lj_potential = lj_potential
+        self.lj_potential = lj_potential
 
         if not isinstance(loss, _torch.nn.Module):
             raise TypeError("loss must be an instance of torch.nn.Module")
-        self._loss = loss
+        self.loss = loss
 
         if not isinstance(l2_reg, (int, float)):
             raise TypeError("l2_reg must be a number")
@@ -186,7 +186,7 @@ class InteractionEnergyLoss(_BaseLoss):
         target = e_int_target
 
         # Calculate base loss
-        if isinstance(self._loss, _WeightedMSELoss):
+        if isinstance(self.loss, _WeightedMSELoss):
             if self._weights_fudge is not None:
                 if isinstance(self._weights_fudge, _torch.Tensor):
                     weights_fudge = self._weights_fudge.to(target.device)[indices]
@@ -207,11 +207,11 @@ class InteractionEnergyLoss(_BaseLoss):
             else:
                 weights = self._weights[indices] / self._weights_normalization
                 weights = weights * weights_fudge
-            loss = self._loss(values, target, weights)
-        elif isinstance(self._loss, _torch.nn.MSELoss):
-            loss = self._loss(values, target)
+            loss = self.loss(values, target, weights)
+        elif isinstance(self.loss, _torch.nn.MSELoss):
+            loss = self.loss(values, target)
         else:
-            raise NotImplementedError(f"Loss function {self._loss} not implemented")
+            raise NotImplementedError(f"Loss function {self.loss} not implemented")
 
         # Add L2 regularization if enabled
         if self._l2_reg > 0:
@@ -276,7 +276,7 @@ class InteractionEnergyLoss(_BaseLoss):
 
         # Calculate or retrieve EMLE energies.
         if self._e_static_emle is None or self._e_ind_emle is None:
-            e_static, e_ind = self._emle_model.forward(
+            e_static, e_ind = self.emle_model.forward(
                 atomic_numbers,
                 charges_mm,
                 xyz_qm,
@@ -290,7 +290,7 @@ class InteractionEnergyLoss(_BaseLoss):
 
         # Calculate or retrieve LJ potential energy
         if self._e_lj is None:
-            e_lj = self._lj_potential.forward(
+            e_lj = self.lj_potential.forward(
                 xyz,
                 solute_mask=solute_mask,
                 solvent_mask=solvent_mask,
@@ -317,14 +317,14 @@ class InteractionEnergyLoss(_BaseLoss):
         """
         # Get current parameter values
         atom_types = _torch.arange(
-            self._lj_potential._num_atom_types + 1, device=self._lj_potential._device
+            self.lj_potential._num_atom_types + 1, device=self.lj_potential._device
         )
-        epsilon = self._lj_potential._epsilon_embedding(atom_types)
-        sigma = self._lj_potential._sigma_embedding(atom_types)
+        epsilon = self.lj_potential._epsilon_embedding(atom_types)
+        sigma = self.lj_potential._sigma_embedding(atom_types)
 
         # Calculate parameter differences
-        epsilon_diff = epsilon - self._lj_potential._epsilon_init
-        sigma_diff = sigma - self._lj_potential._sigma_init
+        epsilon_diff = epsilon - self.lj_potential._epsilon_init
+        sigma_diff = sigma - self.lj_potential._sigma_init
 
         # Calculate regularization term
         return l2_reg * (epsilon_diff.square().sum() + sigma_diff.square().sum())

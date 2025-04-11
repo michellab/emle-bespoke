@@ -53,9 +53,9 @@ class EMLETrainer(_EMLETrainer):
         super().__init__(emle_base, qeq_loss, thole_loss, log_level, log_file)
         if patch_loss is not _PatchingLoss:
             raise TypeError("patch_loss must be a reference to PatchingLoss")
-        self._patch_loss = patch_loss
+        self.patch_loss = patch_loss
 
-        self._emle_model = None
+        self.emle_model = None
 
     @staticmethod
     def _patch_model(
@@ -160,7 +160,7 @@ class EMLETrainer(_EMLETrainer):
         emle_model : EMLE
             The EMLE model to use.
         """
-        self._emle_model = emle_model
+        self.emle_model = emle_model
 
     def get_emle_model(self) -> Optional[_EMLE]:
         """
@@ -171,7 +171,7 @@ class EMLETrainer(_EMLETrainer):
         EMLE or None
             The current EMLE model, or None if no model has been set.
         """
-        return self._emle_model
+        return self.emle_model
 
     def patch(
         self,
@@ -249,13 +249,13 @@ class EMLETrainer(_EMLETrainer):
         """
         # Use provided model, existing model, or create new one
         if emle_model is not None:
-            self._emle_model = emle_model
-        elif self._emle_model is None:
+            self.emle_model = emle_model
+        elif self.emle_model is None:
             if emle_model_filename is None or alpha_mode is None:
                 raise ValueError(
                     "emle_model_filename and alpha_mode are required when no EMLE model exists"
                 )
-            self._emle_model = _EMLE(
+            self.emle_model = _EMLE(
                 model=emle_model_filename,
                 alpha_mode=alpha_mode,
                 device=device,
@@ -263,11 +263,11 @@ class EMLETrainer(_EMLETrainer):
             )
 
         self._patch_model(
-            loss_class=self._patch_loss,
+            loss_class=self.patch_loss,
             opt_param_names=opt_param_names,
             lr=lr,
             epochs=epochs,
-            emle_model=self._emle_model,
+            emle_model=self.emle_model,
             e_static_target=e_static_target,
             e_ind_target=e_ind_target,
             atomic_numbers=atomic_numbers,
@@ -285,10 +285,10 @@ class EMLETrainer(_EMLETrainer):
         )
 
         # Update the EMLE model with the new parameters
-        self._patch_loss._update_s_gpr(self._emle_model._emle_base)
-        self._patch_loss._update_chi_gpr(self._emle_model._emle_base)
-        if self._emle_model._alpha_mode == "reference":
-            self._patch_loss._update_sqrtk_gpr(self._emle_model._emle_base)
+        self.patch_loss._update_s_gpr(self.emle_model._emle_base)
+        self.patch_loss._update_chi_gpr(self.emle_model._emle_base)
+        if self.emle_model._alpha_mode == "reference":
+            self.patch_loss._update_sqrtk_gpr(self.emle_model._emle_base)
 
         # Write the model to a file
         self._write_model_to_file(self.get_emle_model_dict(), f"{filename_prefix}.mat")
@@ -303,25 +303,25 @@ class EMLETrainer(_EMLETrainer):
             The EMLE model dictionary.
         """
         emle_model = {
-            "q_core": self._emle_model._emle_base._q_core,
-            "a_QEq": self._emle_model._emle_base.a_QEq,
-            "a_Thole": self._emle_model._emle_base.a_Thole,
-            "s_ref": self._emle_model._emle_base.ref_values_s,
-            "chi_ref": self._emle_model._emle_base.ref_values_chi,
-            "k_Z": self._emle_model._emle_base.k_Z,
-            "sqrtk_ref": self._emle_model._emle_base.ref_values_sqrtk
-            if self._emle_model._emle_base._alpha_mode == "reference"
+            "q_core": self.emle_model._emle_base._q_core,
+            "a_QEq": self.emle_model._emle_base.a_QEq,
+            "a_Thole": self.emle_model._emle_base.a_Thole,
+            "s_ref": self.emle_model._emle_base.ref_values_s,
+            "chi_ref": self.emle_model._emle_base.ref_values_chi,
+            "k_Z": self.emle_model._emle_base.k_Z,
+            "sqrtk_ref": self.emle_model._emle_base.ref_values_sqrtk
+            if self.emle_model._emle_base._alpha_mode == "reference"
             else None,
             "species": [
                 i
-                for i, val in enumerate(self._emle_model._emle_base._species_map)
+                for i, val in enumerate(self.emle_model._emle_base._species_map)
                 if val != -1
             ],
-            "n_ref": self._emle_model._emle_base._n_ref,
-            "ref_aev": self._emle_model._emle_base._ref_features,
-            "aev_mask": self._emle_model._emle_base._emle_aev_computer._mask,
-            "zid_map": self._emle_model._emle_base._emle_aev_computer._zid_map,
-            "computer_n_species": len(self._emle_model._emle_base._n_ref),
+            "n_ref": self.emle_model._emle_base._n_ref,
+            "ref_aev": self.emle_model._emle_base._ref_features,
+            "aev_mask": self.emle_model._emle_base._emle_aev_computer._mask,
+            "zid_map": self.emle_model._emle_base._emle_aev_computer._zid_map,
+            "computer_n_species": len(self.emle_model._emle_base._n_ref),
         }
 
         return emle_model
