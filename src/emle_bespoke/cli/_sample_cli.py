@@ -20,147 +20,152 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
-    parser.add_argument(
+    # System Configuration group
+    system_group = parser.add_argument_group("System Configuration")
+    system_group.add_argument(
         "--n-solute", type=int, default=1, help="Number of ligands in the system."
     )
-    parser.add_argument(
+    system_group.add_argument(
         "--n-solvent",
         type=int,
         default=1000,
         help="Number of water molecules in the system.",
     )
-    parser.add_argument(
-        "--n-samples", type=int, default=100, help="Number of samples to generate."
-    )
-    parser.add_argument(
-        "--n-steps", type=int, default=1000, help="Number of simulation steps to run."
-    )
-
-    parser.add_argument(
-        "--filename-prefix",
-        type=str,
-        default="ligand",
-        help="Prefix for the output files.",
-    )
-
-    parser.add_argument(
-        "--n-equilibration",
-        type=int,
-        default=1000,
-        help="Number of equilibration steps to run.",
-    )
-
-    parser.add_argument(
-        "--minimize",
-        action="store_true",
-        help="Whether to minimize the system before running the simulation.",
-    )
-
-    parser.add_argument(
+    system_group.add_argument(
         "--solute", type=str, default="c1ccccc1", help="The ligand SMILES string."
     )
-    parser.add_argument(
+    system_group.add_argument(
         "--solvent",
         type=str,
         default="[H:2][O:1][H:3]",
         help="The solvent SMILES string.",
     )
-    parser.add_argument(
+    system_group.add_argument(
         "--forcefields",
         type=str,
         default="openff_unconstrained-2.0.0.offxml,tip3p.offxml",
         help="The force field(s) to use, separated by commas.",
     )
-    parser.add_argument(
+
+    # Simulation Parameters group
+    sim_group = parser.add_argument_group("Simulation Parameters")
+    sim_group.add_argument(
         "--temperature",
         type=float,
         default=298.15,
         help="Simulation temperature in Kelvin.",
     )
-    parser.add_argument(
+    sim_group.add_argument(
         "--pressure", type=float, default=1.0, help="Simulation pressure in bar."
     )
-    parser.add_argument(
+    sim_group.add_argument(
         "--timestep",
         type=float,
         default=1.0,
         help="Simulation timestep in femtoseconds.",
     )
-    parser.add_argument(
+    sim_group.add_argument(
         "--friction-coefficient",
         type=float,
         default=1.0,
         help="Langevin friction coefficient (ps^-1).",
     )
-
-    parser.add_argument(
+    sim_group.add_argument(
         "--cutoff",
         type=float,
         default=12.0,
         help="Cutoff distance in Angstroms. For EMLE, this defines the group-based cutoff between QM and MM regions. For OpenMM, this sets the non-bonded interaction cutoff distance.",
     )
 
-    parser.add_argument(
-        "--ml-model",
-        type=str,
-        default=None,
-        help="The machine learning model to use for the solute.",
+    # Sampling Options group
+    sampling_group = parser.add_argument_group("Sampling Options")
+    sampling_group.add_argument(
+        "--n-samples", type=int, default=100, help="Number of samples to generate."
     )
-
-    parser.add_argument(
-        "--emle-model",
-        type=str,
-        default=None,
-        help="The EMLE model to use for the solute.",
+    sampling_group.add_argument(
+        "--n-steps", type=int, default=1000, help="Number of simulation steps to run."
     )
-
-    parser.add_argument(
-        "--alpha-mode",
-        type=str,
-        default="species",
-        help="Alpha mode of the EMLE model.",
+    sampling_group.add_argument(
+        "--n-equilibration",
+        type=int,
+        default=1000,
+        help="Number of equilibration steps to run.",
     )
-
-    parser.add_argument(
-        "--qm-calculator",
-        type=str,
-        default="orca",
-        help="The QM calculator to use. Options are 'orca'.",
+    sampling_group.add_argument(
+        "--minimize",
+        action="store_true",
+        help="Whether to minimize the system before running the simulation.",
     )
-
-    parser.add_argument(
-        "--mbis-calculator",
-        type=str,
-        default="horton",
-        help="The MBIS calculator to use. Options are 'horton'.",
-    )
-
-    parser.add_argument(
+    sampling_group.add_argument(
         "--sampler",
         type=str,
         default="md",
         help="The sampler to use. Options are 'md'. Must be an OpenMM-compatible sampler.",
     )
 
-    parser.add_argument(
+    # EMLE Model Options group
+    emle_group = parser.add_argument_group("MLP and EMLE Model Options")
+    emle_group.add_argument(
+        "--ml-model",
+        type=str,
+        default=None,
+        help="The machine learning model to use for the solute.",
+    )
+    emle_group.add_argument(
+        "--emle-model",
+        type=str,
+        default=None,
+        help="The EMLE model to use for the solute.",
+    )
+    emle_group.add_argument(
+        "--alpha-mode",
+        type=str,
+        default="species",
+        help="Alpha mode of the EMLE model.",
+    )
+
+    # Calculator Options group
+    calc_group = parser.add_argument_group("Calculator Options")
+    calc_group.add_argument(
+        "--qm-calculator",
+        type=str,
+        default="orca",
+        help="The QM calculator to use. Options are 'orca'.",
+    )
+    calc_group.add_argument(
+        "--mbis-calculator",
+        type=str,
+        default="horton",
+        help="The MBIS calculator to use. Options are 'horton'.",
+    )
+
+    # Input/Output Options group
+    io_group = parser.add_argument_group("Input/Output Options")
+    io_group.add_argument(
+        "--filename-prefix",
+        type=str,
+        default="ligand",
+        help="Prefix for the output files.",
+    )
+
+    # Calculation Control group
+    control_group = parser.add_argument_group("Reference Data Calculation Control")
+    control_group.add_argument(
         "--skip-static",
         action="store_true",
         help="Skip the static energy calculation (calculated by default).",
     )
-
-    parser.add_argument(
+    control_group.add_argument(
         "--skip-induction",
         action="store_true",
         help="Skip the induction energy calculation (calculated by default).",
     )
-
-    parser.add_argument(
+    control_group.add_argument(
         "--skip-mbis",
         action="store_true",
         help="Skip the MBIS partitioning calculation (calculated by default).",
     )
-
-    parser.add_argument(
+    control_group.add_argument(
         "--skip-polarizability",
         action="store_true",
         help="Skip the polarizability calculation (calculated by default).",

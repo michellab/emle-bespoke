@@ -1,4 +1,4 @@
-"""Main script for training a bespoke EMLE model."""
+"""Main script for training and/or patching a bespoke EMLE model."""
 
 import argparse
 import sys
@@ -19,186 +19,173 @@ def main() -> None:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
-    parser.add_argument(
+    # Input/Output group
+    io_group = parser.add_argument_group("Input/Output Options")
+    io_group.add_argument(
         "--reference-data",
         type=str,
         required=True,
         help="Path to the reference data file.",
     )
-
-    parser.add_argument(
-        "--alpha-mode",
-        type=str,
-        default="species",
-        choices=["species", "reference"],
-        help="The mode for the polarizabilities.",
-    )
-
-    parser.add_argument(
+    io_group.add_argument(
         "--filename-prefix",
         type=str,
         default="ligand",
         help="Prefix for the output files.",
     )
-
-    parser.add_argument(
-        "--sigma",
-        type=float,
-        default=0.001,
-        help="The kernel uncertainty parameter.",
-    )
-
-    parser.add_argument(
-        "--ivm-thr",
-        type=float,
-        default=0.05,
-        help="The IVM threshold parameter.",
-    )
-
-    parser.add_argument(
-        "--epochs",
-        type=int,
-        default=500,
-        help="The number of epochs to train the model.",
-    )
-
-    parser.add_argument(
-        "--lr-qeq",
-        type=float,
-        default=0.05,
-        help="The learning rate for the QEq model.",
-    )
-
-    parser.add_argument(
-        "--lr-thole",
-        type=float,
-        default=0.05,
-        help="The learning rate for the Thole model.",
-    )
-
-    parser.add_argument(
-        "--lr-sqrtk",
-        type=float,
-        default=0.05,
-        help="The learning rate for the sqrtk model.",
-    )
-
-    parser.add_argument(
-        "--print-every",
-        type=int,
-        default=10,
-        help="Print the loss every N epochs.",
-    )
-
-    parser.add_argument(
-        "--train-mask",
-        type=str,
-        default=None,
-        help="The mask to use for training.",
-    )
-
-    parser.add_argument(
-        "--skip-training",
-        action="store_true",
-        help="Skip training the model. Useful if only patching is desired.",
-    )
-
-    parser.add_argument(
-        "--patch",
-        action="store_true",
-        help="Patch the model after training.",
-    )
-
-    parser.add_argument(
-        "--lr-patch",
-        type=float,
-        default=0.001,
-        help="The learning rate for patching the model.",
-    )
-
-    parser.add_argument(
-        "--epochs-patch",
-        type=int,
-        default=1000,
-        help="The number of epochs to patch the model.",
-    )
-
-    parser.add_argument(
+    io_group.add_argument(
         "--emle-model-filename",
         type=str,
         default=None,
         help="The filename of the EMLE model to patch.",
     )
 
-    parser.add_argument(
+    # Training Options group
+    training_group = parser.add_argument_group("Bespoke Training Options")
+    training_group.add_argument(
+        "--skip-training",
+        action="store_true",
+        help="Skip training the model. Useful if only patching is desired.",
+    )
+    training_group.add_argument(
+        "--sigma",
+        type=float,
+        default=0.001,
+        help="The kernel uncertainty parameter.",
+    )
+    training_group.add_argument(
+        "--ivm-thr",
+        type=float,
+        default=0.05,
+        help="The IVM threshold parameter.",
+    )
+    training_group.add_argument(
+        "--epochs",
+        type=int,
+        default=500,
+        help="The number of epochs to train the model.",
+    )
+    training_group.add_argument(
+        "--print-every",
+        type=int,
+        default=10,
+        help="Print the loss every N epochs.",
+    )
+    training_group.add_argument(
+        "--train-mask",
+        type=str,
+        default=None,
+        help="The mask to use for training.",
+    )
+    training_group.add_argument(
+        "--lr-qeq",
+        type=float,
+        default=0.05,
+        help="The learning rate for the QEq model.",
+    )
+    training_group.add_argument(
+        "--lr-thole",
+        type=float,
+        default=0.05,
+        help="The learning rate for the Thole model.",
+    )
+    training_group.add_argument(
+        "--lr-sqrtk",
+        type=float,
+        default=0.05,
+        help="The learning rate for the sqrtk model.",
+    )
+
+    # Patching Options group
+    patching_group = parser.add_argument_group("Patching Options")
+    patching_group.add_argument(
+        "--patch",
+        action="store_true",
+        help="Patch the model after training.",
+    )
+    patching_group.add_argument(
+        "--lr-patch",
+        type=float,
+        default=0.001,
+        help="The learning rate for patching the model.",
+    )
+    patching_group.add_argument(
+        "--epochs-patch",
+        type=int,
+        default=1000,
+        help="The number of epochs to patch the model.",
+    )
+    patching_group.add_argument(
+        "--alpha-mode",
+        type=str,
+        default="species",
+        choices=["species", "reference"],
+        help="The mode for the polarizabilities.",
+    )
+    patching_group.add_argument(
         "--skip-e-static",
         action="store_true",
         help="Skip fitting the static energy (fitted by default).",
     )
-
-    parser.add_argument(
+    patching_group.add_argument(
         "--skip-e-ind",
         action="store_true",
         help="Skip fitting the induced energy (fitted by default).",
     )
-
-    parser.add_argument(
+    patching_group.add_argument(
         "--fit-e-total",
         action="store_true",
         help="Fit the total energy.",
     )
-
-    parser.add_argument(
+    patching_group.add_argument(
         "--e-static-param",
         type=lambda x: x.split(","),
         default="a_QEq,ref_values_chi",
         help="The parameter to fit for the static energy. Provide as comma-separated values.",
     )
-
-    parser.add_argument(
+    patching_group.add_argument(
         "--e-ind-param",
         type=lambda x: x.split(","),
         default="a_Thole,k_Z,ref_values_sqrtk",
         help="The parameters to fit for the induced energy, provided as comma-separated values.",
     )
 
-    parser.add_argument(
+    # Regularization Options group
+    patching_group.add_argument(
         "--l2-reg-alpha",
         type=float,
         default=1.0,
         help="The L2 regularization parameter for alpha. Only used if e_ind is fitted during patching.",
     )
-
-    parser.add_argument(
+    patching_group.add_argument(
         "--l2-reg-s",
         type=float,
         default=1.0,
         help="The L2 regularization parameter for s. Only used if e_static is fitted during patching.",
     )
-
-    parser.add_argument(
+    patching_group.add_argument(
         "--l2-reg-q",
         type=float,
         default=1.0,
         help="The L2 regularization parameter for q. Only used if e_static is fitted during patching.",
     )
 
-    parser.add_argument(
+    # Computation Options group
+    compute_group = parser.add_argument_group("Computation Options")
+    compute_group.add_argument(
         "--n-batches",
         type=int,
         default=32,
         help="The number of batches to use for calculating the EMLE predictions when patching the model.",
     )
-
-    parser.add_argument(
+    compute_group.add_argument(
         "--device",
         type=str,
         default="cuda",
         choices=["cuda", "cpu"],
         help="The device to use for training.",
     )
-
-    parser.add_argument(
+    compute_group.add_argument(
         "--dtype",
         type=str,
         default="float64",
