@@ -173,7 +173,7 @@ class BaseLoss(_BaseLoss):
             Unnormalized non-Boltzmann weights.
         """
         return _torch.exp(-(e_int_target - e_int_predicted) / self._kBT)
-    
+
     def _calculate_openff_weights(self, e_int_target: _torch.Tensor) -> _torch.Tensor:
         """
         Calculate OpenFF weights for energy fitting.
@@ -186,7 +186,8 @@ class BaseLoss(_BaseLoss):
 
         weights = _torch.zeros_like(e_int_target)
         weights[mask_uniform] = 1.0
-        weights[mask_boltzmann] = (4.184 + (e_int_target[mask_boltzmann] - 4.184) ** 2) ** (-0.5) #_torch.exp(-e_int_target[mask_boltzmann] / self._kBT)
+        weights[mask_boltzmann] = (
+            4.184 + (e_int_target[mask_boltzmann] - 4.184) ** 2
+        ) ** (-0.5)  # _torch.exp(-e_int_target[mask_boltzmann] / self._kBT)
         weights[mask_none] = 0.0
         return weights
-
