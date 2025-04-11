@@ -174,8 +174,7 @@ class LennardJonesPotential(_torch.nn.Module):
         """
         return grad * self._epsilon_grad_mask
 
-    @staticmethod
-    def print_lj_parameters(lj_params: Dict) -> None:
+    def print_lj_parameters(self, lj_params: Optional[Dict] = None) -> None:
         """
         Print the Lennard-Jones parameters in a formatted table.
 
@@ -190,6 +189,9 @@ class LennardJonesPotential(_torch.nn.Module):
                 "n-tip3p-H": {"sigma": 0.235, "epsilon": 0.0},
             }
         """
+        if lj_params is None:
+            lj_params = self._lj_params
+
         _logger.debug("")
         _logger.debug("Lennard-Jones Parameters")
         _logger.debug("-" * 40)
@@ -216,7 +218,7 @@ class LennardJonesPotential(_torch.nn.Module):
         for param in self._forcefield["vdW"].parameters:
             if param.id in self._lj_params:
                 param.sigma = _offunit.Quantity(
-                    self._lj_params[param.id]["sigma"], _offunit.nanometer
+                    self._lj_params[param.id]["sigma"], _offunit.angstrom
                 )
                 param.epsilon = _offunit.Quantity(
                     self._lj_params[param.id]["epsilon"], _offunit.kilojoule_per_mole
@@ -339,9 +341,7 @@ class LennardJonesPotential(_torch.nn.Module):
             for mol in labels:
                 for _, val in mol["vdW"].items():
                     if val.id not in lj_params:
-                        sigma = (
-                            val.sigma.to_openmm().in_units_of(_unit.nanometers)._value
-                        )
+                        sigma = val.sigma.to_openmm().in_units_of(_unit.angstrom)._value
                         epsilon = (
                             val.epsilon.to_openmm()
                             .in_units_of(_unit.kilojoule_per_mole)
@@ -449,8 +449,7 @@ class LennardJonesPotential(_torch.nn.Module):
         xyz: _torch.Tensor,
         solute_mask: _torch.Tensor,
         solvent_mask: _torch.Tensor,
-        start_idx: int = 0,
-        end_idx: Optional[int] = None,
+        indices: _torch.Tensor,
         checkpoint: bool = True,
     ) -> _torch.Tensor:
         """
@@ -470,10 +469,8 @@ class LennardJonesPotential(_torch.nn.Module):
             Boolean mask for solute atoms of shape (batch, natoms).
         solvent_mask : _torch.Tensor
             Boolean mask for solvent atoms of shape (batch, natoms).
-        start_idx : int, optional
-            Start index for batch processing. Default is 0.
-        end_idx : Optional[int], optional
-            End index for batch processing. If None, processes until the end.
+        indices : _torch.Tensor
+            Indices of the topologies for which to compute the energy.
         checkpoint : bool, optional
             Whether to use gradient checkpointing. Default is True.
 
@@ -482,7 +479,7 @@ class LennardJonesPotential(_torch.nn.Module):
         _torch.Tensor
             Total LJ energy for each configuration in the batch.
         """
-        atom_type_ids = self._atom_type_ids[start_idx:end_idx]
+        atom_type_ids = self._atom_type_ids[indices]
 
         if checkpoint:
             total_energy = _checkpoint(
