@@ -25,9 +25,9 @@ class BaseLoss(_BaseLoss):
         if not isinstance(weighting_method, str):
             raise TypeError("weighting_method must be a string")
         weighting_method = weighting_method.lower()
-        if weighting_method not in ["boltzmann", "uniform", "non-boltzmann"]:
+        if weighting_method not in ["boltzmann", "uniform", "non-boltzmann", "openff"]:
             raise ValueError(
-                'weighting_method must be one of "boltzmann", "uniform", or "non-boltzmann"'
+                'weighting_method must be one of "boltzmann", "uniform", "non-boltzmann", or "openff"'
             )
         self._weighting_method = weighting_method
 
@@ -115,6 +115,8 @@ class BaseLoss(_BaseLoss):
             return self._calculate_uniform_weights(e_int_target)
         elif method == "non-boltzmann":
             return self._calculate_non_boltzmann_weights(e_int_target, e_int_predicted)
+        elif method == "openff":
+            return self._calculate_openff_weights(e_int_target)
         else:
             raise ValueError(f"Invalid weighting method: {method}")
 
@@ -171,3 +173,20 @@ class BaseLoss(_BaseLoss):
             Unnormalized non-Boltzmann weights.
         """
         return _torch.exp(-(e_int_target - e_int_predicted) / self._kBT)
+    
+    def _calculate_openff_weights(self, e_int_target: _torch.Tensor) -> _torch.Tensor:
+        """
+        Calculate OpenFF weights for energy fitting.
+
+        Eq. (5) in https://pubs.acs.org/doi/10.1021/acs.jctc.3c00039.
+        """
+        mask_uniform = e_int_target < 4.184
+        mask_boltzmann = (e_int_target >= 4.184) & (e_int_target < (5.0 * 4.184))
+        mask_none = e_int_target >= (5.0 * 4.184)
+
+        weights = _torch.zeros_like(e_int_target)
+        weights[mask_uniform] = 1.0
+        weights[mask_boltzmann] = (4.184 + (e_int_target[mask_boltzmann] - 4.184) ** 2) ** (-0.5) #_torch.exp(-e_int_target[mask_boltzmann] / self._kBT)
+        weights[mask_none] = 0.0
+        return weights
+
