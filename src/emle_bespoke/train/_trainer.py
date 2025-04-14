@@ -10,7 +10,7 @@ from emle.train._loss import QEqLoss as _QEqLoss
 from emle.train._loss import TholeLoss as _TholeLoss
 from loguru import logger as _logger
 
-from ..loss._loss import PatchingLoss as _PatchingLoss
+from ..loss._patching import PatchingLoss as _PatchingLoss
 from ._emle import EMLEPatched as _EMLEPatched
 
 

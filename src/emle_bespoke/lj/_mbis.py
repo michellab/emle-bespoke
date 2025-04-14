@@ -98,27 +98,29 @@ class AILennardJones:
         torch.Tensor(NMOL, N)
             Trace of the inverse of each 3x3 block per molecule.
         """
-        if A_thole.dim() not in [2, 3]:
-            raise RuntimeError("Input tensor must be 2D or 3D")
+        if A_thole.dim() == 2:
+            A_thole = A_thole.unsqueeze(0)  # Add batch dimension if missing
 
-        n_mol, dim, _ = A_thole.shape if A_thole.dim() == 3 else (1, *A_thole.shape)
+        n_mol, dim, _ = A_thole.shape
+        if dim % 3 != 0:
+            raise ValueError("Dimension of A_thole must be divisible by 3.")
+
         n_atoms = dim // 3
-        traces = []
+        traces = _torch.empty(
+            (n_mol, n_atoms), dtype=A_thole.dtype, device=A_thole.device
+        )
 
         for mol_idx in range(n_mol):
-            mol_traces = _torch.stack(
-                [
-                    _torch.trace(
-                        _torch.inverse(
-                            A_thole[mol_idx, 3 * i : 3 * i + 3, 3 * i : 3 * i + 3]
-                        )
-                    )
-                    for i in range(n_atoms)
+            for atom_idx in range(n_atoms):
+                block = A_thole[
+                    mol_idx,
+                    3 * atom_idx : 3 * atom_idx + 3,
+                    3 * atom_idx : 3 * atom_idx + 3,
                 ]
-            )
-            traces.append(mol_traces)
+                inv_block = _torch.inverse(block)
+                traces[mol_idx, atom_idx] = _torch.trace(inv_block) / 3.0
 
-        return _torch.stack(traces, dim=0) / 3.0
+        return traces
 
     def compute_isotropic_polarizabilities(
         self, A_thole: _torch.Tensor

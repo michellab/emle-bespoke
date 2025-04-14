@@ -7,7 +7,7 @@ import openmm.unit as _unit
 from loguru import logger as _logger
 
 from .._constants import ATOMIC_NUMBERS_TO_SYMBOLS as _ATOMIC_NUMBERS_TO_SYMBOLS
-from ..reference_data import ReferenceData as _ReferenceData
+from ..reference_data import ReferenceDataset as _ReferenceData
 from ._base import Sampler as _Sampler
 
 

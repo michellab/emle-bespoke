@@ -192,16 +192,16 @@ class LennardJonesPotential(_torch.nn.Module):
         if lj_params is None:
             lj_params = self._lj_params
 
-        _logger.debug("")
+        _logger.debug("-" * 50)
         _logger.debug("Lennard-Jones Parameters")
-        _logger.debug("-" * 40)
-        _logger.debug(f"{'Atom Type':16s} | {'σ (nm)':>8s} | {'ε (kJ/mol)':>12s}")
-        _logger.debug("-" * 40)
+        _logger.debug("-" * 50)
+        _logger.debug(f"{'Atom Type':16s} | {'σ (Å)':>8s} | {'ε (kJ/mol)':>12s}")
+        _logger.debug("-" * 50)
         for atom, params in lj_params.items():
             sigma = params["sigma"]
             epsilon = params["epsilon"]
             _logger.debug(f"{atom:16s} | {sigma:8.4f} | {epsilon:12.4f}")
-        _logger.debug("-" * 40)
+        _logger.debug("-" * 50)
 
     def update_lj_parameters(self) -> None:
         """Update LJ parameters in both internal storage and ForceField object."""

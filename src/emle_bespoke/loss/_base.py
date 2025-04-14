@@ -15,21 +15,27 @@ class BaseLoss(_BaseLoss):
     def __init__(
         self,
         temperature: float = 300.0,
-        weighting_method: str = "uniform",
+        weighting_method: Optional[str] = None,
         weights_fudge: float = 1.0,
         *args,
         **kwargs,
     ) -> None:
         super().__init__(*args, **kwargs)
 
-        if not isinstance(weighting_method, str):
-            raise TypeError("weighting_method must be a string")
-        weighting_method = weighting_method.lower()
-        if weighting_method not in ["boltzmann", "uniform", "non-boltzmann", "openff"]:
-            raise ValueError(
-                'weighting_method must be one of "boltzmann", "uniform", "non-boltzmann", or "openff"'
-            )
-        self._weighting_method = weighting_method
+        self._weighting_method = None
+        if weighting_method is not None:
+            if not isinstance(weighting_method, str):
+                raise TypeError("weighting_method must be a string")
+
+            valid_methods = ["boltzmann", "uniform", "non-boltzmann", "openff"]
+            weighting_method = weighting_method.lower()
+
+            if weighting_method not in valid_methods:
+                raise ValueError(
+                    f"weighting_method must be one of {', '.join(valid_methods)}"
+                )
+
+            self._weighting_method = weighting_method
 
         if not isinstance(temperature, (int, float)):
             raise TypeError("temperature must be a number")
@@ -80,7 +86,10 @@ class BaseLoss(_BaseLoss):
         self._weights = self._calculate_weights(
             e_int_target, e_int_predicted, self._weighting_method
         )
-        self._weights_normalization = self._weights.sum()
+        if self._weighting_method == None:
+            self._weights_normalization = 1.0
+        else:
+            self._weights_normalization = self._weights.sum()
 
         return self._weights, self._weights_normalization
 
@@ -117,8 +126,16 @@ class BaseLoss(_BaseLoss):
             return self._calculate_non_boltzmann_weights(e_int_target, e_int_predicted)
         elif method == "openff":
             return self._calculate_openff_weights(e_int_target)
+        elif method == None:
+            return self._calculate_none_weights(e_int_target)
         else:
             raise ValueError(f"Invalid weighting method: {method}")
+
+    def _calculate_none_weights(self, e_int_target: _torch.Tensor) -> _torch.Tensor:
+        """
+        Calculate none weights for energy fitting.
+        """
+        return _torch.ones_like(e_int_target)
 
     def _calculate_uniform_weights(self, e_int_target: _torch.Tensor) -> _torch.Tensor:
         """

@@ -216,9 +216,9 @@ def main() -> None:
     from emle.train._loss import QEqLoss as _QEqLoss
     from emle.train._loss import TholeLoss as _TholeLoss
 
+    from ..loss._patching import PatchingLoss as _PatchingLoss
     from ..train import EMLEPatched as _EMLEPatched
     from ..train import EMLETrainer as _EMLETrainer
-    from ..train import PatchingLoss as _PatchingLoss
     from ..utils import (
         convert_reference_data_to_tensors as _convert_reference_data_to_tensors,
     )

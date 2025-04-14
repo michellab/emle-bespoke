@@ -199,7 +199,7 @@ def main():
 
     # Imports from the emle-bespoke package
     from ..calculators import ReferenceDataCalculator as _ReferenceDataCalculator
-    from ..reference_data import ReferenceData as _ReferenceData
+    from ..reference_data import ReferenceDataset as _ReferenceDataset
     from ..samplers._md import MDSampler as _MDSampler
     from ..utils import add_emle_force as _add_emle_force
     from ..utils import create_mixed_system as _create_mixed_system
@@ -318,7 +318,7 @@ def main():
         mbis_calculator=mbis_calculator,
     )
 
-    ref_data = _ReferenceData()
+    ref_data = _ReferenceDataset()
 
     # ------------------------------------------------------------------------- #
     #                Sample configurations and calculate reference data         #
@@ -338,7 +338,7 @@ def main():
         ref_data.add(ref_data_output)
 
     # Save the reference data
-    ref_data.write(args.filename_prefix)
+    ref_data.write(args.filename_prefix + ".pkl")
 
     _log_termination()
 

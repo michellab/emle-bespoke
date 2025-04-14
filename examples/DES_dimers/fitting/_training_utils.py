@@ -199,9 +199,9 @@ def train_model(
                 _logger.warning(
                     f"Parameter {name} specified for optimization but requires_grad=False. Skipping."
                 )
-        else:
-            param.requires_grad_(False)
-            _logger.debug(f"Freezing parameter: {name}")
+        # else:
+        #    param.requires_grad_(False)
+        #    _logger.debug(f"Freezing parameter: {name}")
 
     if not opt_parameters:
         _logger.error(

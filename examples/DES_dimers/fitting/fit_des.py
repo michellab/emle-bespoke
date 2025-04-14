@@ -25,7 +25,8 @@ def _evaluate_energies(emle_model, lj_model, dataloader, device):
     emle_model.eval()
     lj_model.eval()
 
-    for batch in progress_bar:
+    for batch_data in progress_bar:
+        """
         batch_data = {
             k: v.to(device)
             for k, v in batch.items()
@@ -40,6 +41,7 @@ def _evaluate_energies(emle_model, lj_model, dataloader, device):
                 )
             }
         )
+        """
 
         with _torch.no_grad():
             # EMLE forward pass
@@ -137,8 +139,8 @@ def _run_lj_optimization(
     trained_loss_instance = train_model(
         loss_class=_InteractionEnergyLoss,
         opt_param_names=lj_params_to_fit,
-        lr=args.lr,
-        epochs=args.epochs,
+        lr=args.lr_lj,
+        epochs=args.epochs_lj,
         dataloader=dataloader,
         print_every=args.print_every,
         loss_class_kwargs=loss_class_kwargs_lj,
@@ -185,16 +187,17 @@ def _run_emle_optimization(
         "emle_model": emle_model,
         "weighting_method": args.weighting_method,
         "l2_reg": args.l2_reg,
-        "weights_fudge": 1.0,
-        "e_lj": _torch.tensor(
-            fixed_lj_energies["e_lj"], device=device, dtype=_torch.float64
-        ),
+        # "weights_fudge": 1.0,
+        "e_lj": _torch.zeros(len(dataloader.dataset)).to(device),
+        # "e_lj": _torch.tensor(
+        #    fixed_lj_energies["e_lj"], device=device, dtype=_torch.float64
+        # ),
     }
     trained_loss_instance = train_model(
         loss_class=_InteractionEnergyLoss,
         opt_param_names=emle_params_to_fit,
-        lr=args.lr,
-        epochs=args.epochs,
+        lr=args.lr_emle,
+        epochs=args.epochs_emle,
         dataloader=dataloader,
         print_every=args.print_every,
         loss_class_kwargs=loss_class_kwargs_emle,
@@ -243,8 +246,8 @@ def _run_simultaneous_optimization(
     trained_loss_instance = train_model(
         loss_class=_InteractionEnergyLoss,
         opt_param_names=opt_params_all,
-        lr=args.lr,
-        epochs=args.epochs,
+        lr=args.lr_lj,
+        epochs=args.epochs_lj,
         dataloader=dataloader,
         print_every=args.print_every,
         loss_class_kwargs=loss_class_kwargs,
@@ -346,13 +349,28 @@ def main():
         help="Number of gradient accumulation steps",
     )
     train_group.add_argument(
-        "--lr",
+        "--lr-lj",
         type=float,
         default=0.001,
-        help="Optimizer learning rate",
+        help="Optimizer learning rate for LJ parameters",
     )
     train_group.add_argument(
-        "--epochs", type=int, default=100, help="Maximum number of training epochs"
+        "--lr-emle",
+        type=float,
+        default=0.001,
+        help="Optimizer learning rate for EMLE parameters",
+    )
+    train_group.add_argument(
+        "--epochs-lj",
+        type=int,
+        default=100,
+        help="Maximum number of training epochs for LJ parameters",
+    )
+    train_group.add_argument(
+        "--epochs-emle",
+        type=int,
+        default=100,
+        help="Maximum number of training epochs for EMLE parameters",
     )
     train_group.add_argument(
         "--print-every",
@@ -447,6 +465,9 @@ def main():
     from emle_bespoke.lj import LennardJonesPotential as _LJPotential
     from emle_bespoke.reference_data import ReferenceDataset as _ReferenceDataset
 
+    # Good for debugging
+    _torch.autograd.set_detect_anomaly(True)
+
     _os.makedirs(args.output_dir, exist_ok=True)
     try:
         # Load processed data
@@ -476,6 +497,10 @@ def main():
             emle_params_to_fit = [
                 param.strip() for param in args.emle_params.split(",")
             ]
+
+        if not lj_params_to_fit and not emle_params_to_fit:
+            _logger.warning("No parameters specified for optimization. Exiting.")
+            return
 
         # Create parameters_to_fit dictionary for LJ potential
         parameters_to_fit_lj = {
@@ -526,6 +551,8 @@ def main():
             alpha_mode=args.alpha_mode,
         )
 
+        emle_model.eval()
+
         # TODO: remove this
         # Prepare data (move to device, convert to tensors)
         if "zzz" in reference_dataset._data:  # Clean up potential leftover keys
@@ -568,6 +595,19 @@ def main():
             )
 
         elif args.opt_strategy == "lj-then-emle":
+            del emle_model, lj_model
+            emle_model = _EMLE(
+                device=device,
+                dtype=_torch.float64,
+                model=args.emle_model,
+                alpha_mode=args.alpha_mode,
+            )
+            lj_model = _LJPotential(
+                topology_off=reference_data_dict["topology"],
+                forcefield=force_field,
+                parameters_to_fit=parameters_to_fit_lj,
+                device=device,
+            )
             # 1. Optimize LJ
             lj_model = _run_lj_optimization(
                 lj_params_to_fit,
