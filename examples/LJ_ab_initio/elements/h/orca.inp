@@ -1,0 +1,13 @@
+!uks  b3lyp cc-pvtz TightSCF NoFrozenCore KeepDens 
+%MaxCore 1024
+%pal
+nprocs 8
+end
+%elprop
+Polar 1
+dipole true
+quadrupole true
+end
+
+* xyzfile 0 2 h.xyz
+
