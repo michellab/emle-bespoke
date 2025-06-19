@@ -18,15 +18,15 @@ $ DFT_Energy
    description: The DFT energy
    geom. index: 1
    prop. index: 1
-   Number of Alpha Electrons                  1.0000012296 
-   Number of Beta  Electrons                  0.0000000000 
-   Total number of  Electrons                 1.0000012296 
-   Exchange energy                           -0.2423475616 
-   Correlation energy                        -0.0041824201 
-   Correlation energy NL                      0.0000000000 
-   Exchange-Correlation energy               -0.2465299817 
-   Embedding correction                       0.0000000000 
-   Total DFT Energy (No VdW correction)      -0.4987664660 
+   Number of Alpha Electrons                  1.0000012296
+   Number of Beta  Electrons                  0.0000000000
+   Total number of  Electrons                 1.0000012296
+   Exchange energy                           -0.2423475616
+   Correlation energy                        -0.0041824201
+   Correlation energy NL                      0.0000000000
+   Exchange-Correlation energy               -0.2465299817
+   Embedding correction                       0.0000000000
+   Total DFT Energy (No VdW correction)      -0.4987664660
 # -----------------------------------------------------------
 $ Mayer_Pop
    description: The Mayer population analysis
@@ -65,58 +65,58 @@ $ SCF_Electric_Properties
    description: The SCF Calculated Electric Properties
    geom. index: 1
    prop. index: 1
-       Filename                          : orca.scfp 
-       Do Dipole Moment Calculation      : true 
-       Do Quadrupole Moment Calculation  : true 
-       Do Polarizability Calculation     : true 
+       Filename                          : orca.scfp
+       Do Dipole Moment Calculation      : true
+       Do Quadrupole Moment Calculation  : true
+       Do Polarizability Calculation     : true
 ** Dipole moment part of electric properties **
         Magnitude of dipole moment (Debye) :        0.0000000000
         Electronic Contribution:
-                  0    
+                  0
       0      -0.000000
       1      -0.000000
       2       0.000000
         Nuclear Contribution:
-                  0    
+                  0
       0       0.000000
       1       0.000000
       2      -0.000000
         Total Dipole moment:
-                  0    
+                  0
       0      -0.000000
       1      -0.000000
       2      -0.000000
 ** Quadrupole moment part of electric properties **
         Isotropic Quadrupole moment :      -1.0353569772
         Nuclear part of quadrupole moment
-                  0          1          2    
+                  0          1          2
       0       0.000000   0.000000   0.000000
       1       0.000000   0.000000   0.000000
       2       0.000000   0.000000   0.000000
         Electronic part of quadrupole moment
-                  0          1          2    
+                  0          1          2
       0      -1.035357  -0.000000  -0.000000
       1      -0.000000  -1.035357  -0.000000
       2      -0.000000  -0.000000  -1.035357
         Total quadrupole moment
-                  0          1          2    
+                  0          1          2
       0      -1.035357  -0.000000  -0.000000
       1      -0.000000  -1.035357  -0.000000
       2      -0.000000  -0.000000  -1.035357
         Quadrupole moment diagonaized tensor
-                  0    
+                  0
       0      -1.035357
       1      -1.035357
       2      -1.035357
 ** Polarizabilities part of electric properties **
         Isotropic polarizability :        1.8649723871
         The raw cartesian tensor (atomic units):
-                  0          1          2    
+                  0          1          2
       0       1.864972   0.000000  -0.000000
       1       0.000000   1.864972  -0.000000
       2      -0.000000  -0.000000   1.864972
         Diagonalised polarizability tensor :
-                  0    
+                  0
       0       1.864972
       1       1.864972
       2       1.864972
@@ -124,7 +124,7 @@ $ SCF_Electric_Properties
 ----------------------- !GEOMETRIES! ------------------------
 # -------------------------------------------------------------
 ------------------------ !GEOMETRY! -------------------------
-    Number of atoms:    1 
-    Geometry Index:     1 
+    Number of atoms:    1
+    Geometry Index:     1
     Coordinates:
                0 H     27.407000000000    1.273000000000   27.856001000000

@@ -8,16 +8,16 @@ from typing import Dict, List, Optional, Tuple
 import numpy as _np
 import torch as _torch
 from emle.models import EMLE as _EMLE
-from emle_bespoke._constants import ANGSTROM_TO_BOHR as _ANGSTROM_TO_BOHR
-
-from emle_bespoke._log import _logger
-from emle_bespoke._log import log_banner as _log_banner
-from emle_bespoke._log import log_cli_args as _log_cli_args
-from emle_bespoke.lj import AILennardJones as _AILennardJones
 from openff.toolkit.topology import Molecule as _Molecule
 from openff.toolkit.typing.engines.smirnoff import ForceField as _ForceField
 from rdkit import Chem as _Chem
 from rdkit.Chem import rdDetermineBonds as _rdDetermineBonds
+
+from emle_bespoke._constants import ANGSTROM_TO_BOHR as _ANGSTROM_TO_BOHR
+from emle_bespoke._log import _logger
+from emle_bespoke._log import log_banner as _log_banner
+from emle_bespoke._log import log_cli_args as _log_cli_args
+from emle_bespoke.lj import AILennardJones as _AILennardJones
 
 
 def load_data(input_file: str) -> Tuple[_np.ndarray, _np.ndarray]:

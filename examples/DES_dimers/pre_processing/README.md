@@ -2,7 +2,7 @@
 
 ## Instructions
 
-1. Process the 
+1. Process the
 
 
 ## Note
@@ -84,7 +84,7 @@ The script generates a pickle file containing the processed data with the follow
 - `xyz_mm`: Coordinates of the first monomer [Angstrom]
 - `xyz_qm`: Coordinates of the second monomer [Angstrom]
 - `xyz`: Combined coordinates [Angstrom]
-- `atomic_numbers`: Atomic numbers [integer] 
+- `atomic_numbers`: Atomic numbers [integer]
 - `charges_mm`: Charges of the first monomer [elementary charge]
 - `solute_mask`: Mask for the first monomer [boolean]
 - `solvent_mask`: Mask for the second monomer [boolean]

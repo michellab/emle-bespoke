@@ -10,15 +10,9 @@ import numpy as _np
 import openmm as _mm
 import pandas as pd
 from openff.interchange import Interchange as _Interchange
-from openff.toolkit import (
-    ForceField as _ForceField,
-)
-from openff.toolkit import (
-    Molecule as _Molecule,
-)
-from openff.toolkit import (
-    Topology as _Topology,
-)
+from openff.toolkit import ForceField as _ForceField
+from openff.toolkit import Molecule as _Molecule
+from openff.toolkit import Topology as _Topology
 from rdkit import Chem as _Chem
 
 from emle_bespoke.reference_data import ReferenceDataset as _ReferenceDataset

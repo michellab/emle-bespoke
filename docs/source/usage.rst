@@ -30,7 +30,7 @@ Here's how to train a basic EMLE model:
         model_filename="model.mat",
         sigma=0.001,
         ivm_thr=0.05,
-        epochs=500
+        epochs=500,
     )
 
 Patching a Model
@@ -52,7 +52,7 @@ To patch an existing model:
         q_core=q_core,
         q_val=q_val,
         s=s,
-        alpha=alpha
+        alpha=alpha,
     )
 
 Command Line Interface
@@ -86,7 +86,7 @@ EMLE-Bespoke provides different samplers for various use cases:
 
     # Using OpenMM sampler
     sampler = OpenMMSampler(system, context, integrator)
-    
+
     # Using MD sampler
     md_sampler = MDSampler(system, context, integrator)
 
@@ -104,7 +104,7 @@ You can customize various aspects of training:
         lr_sqrtk=0.05,
         print_every=10,
         device="cuda",
-        dtype="float64"
+        dtype="float64",
     )
 
 Tips and Best Practices
@@ -114,4 +114,4 @@ Tips and Best Practices
 2. Use appropriate learning rates for your specific case
 3. Monitor training progress using the print_every parameter
 4. Save models regularly during training
-5. Use GPU acceleration when available 
+5. Use GPU acceleration when available

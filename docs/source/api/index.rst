@@ -41,4 +41,4 @@ Command Line Interface
 .. automodule:: emle_bespoke.cli
    :members:
    :undoc-members:
-   :show-inheritance: 
+   :show-inheritance:

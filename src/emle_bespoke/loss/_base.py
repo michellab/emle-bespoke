@@ -205,6 +205,8 @@ class BaseLoss(_BaseLoss):
         weights[mask_uniform] = 1.0
         weights[mask_boltzmann] = (
             4.184 + (e_int_target[mask_boltzmann] - 4.184) ** 2
-        ) ** (-0.5)  # _torch.exp(-e_int_target[mask_boltzmann] / self._kBT)
+        ) ** (
+            -0.5
+        )  # _torch.exp(-e_int_target[mask_boltzmann] / self._kBT)
         weights[mask_none] = 0.0
         return weights

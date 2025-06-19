@@ -1,4 +1,4 @@
-!uks  b3lyp cc-pvtz TightSCF NoFrozenCore KeepDens 
+!uks  b3lyp cc-pvtz TightSCF NoFrozenCore KeepDens
 %MaxCore 1024
 %pal
 nprocs 8
@@ -10,4 +10,3 @@ quadrupole true
 end
 
 * xyzfile 0 3 c.xyz
-

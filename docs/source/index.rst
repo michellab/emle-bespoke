@@ -28,24 +28,24 @@ Here's a simple example of using EMLE-Bespoke:
 
 .. code-block:: python
 
-   from emle_bespoke import EMLETrainer
+    from emle_bespoke import EMLETrainer
 
-   # Initialize trainer
-   trainer = EMLETrainer()
+    # Initialize trainer
+    trainer = EMLETrainer()
 
-   # Train model
-   trainer.train(
-       z=atomic_numbers,
-       xyz=coordinates,
-       s=s_values,
-       q_core=q_core_values,
-       q_val=q_val_values,
-       alpha=alpha_values
-   )
+    # Train model
+    trainer.train(
+        z=atomic_numbers,
+        xyz=coordinates,
+        s=s_values,
+        q_core=q_core_values,
+        q_val=q_val_values,
+        alpha=alpha_values,
+    )
 
 Indices and tables
 ==================
 
 * :ref:`genindex`
 * :ref:`modindex`
-* :ref:`search` 
+* :ref:`search`

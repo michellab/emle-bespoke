@@ -60,5 +60,6 @@ To verify your installation:
 
 .. code-block:: python
 
-   import emle_bespoke
-   print(emle_bespoke.__version__) 
+    import emle_bespoke
+
+    print(emle_bespoke.__version__)

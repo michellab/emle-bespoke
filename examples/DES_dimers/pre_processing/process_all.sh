@@ -35,4 +35,4 @@ $BASE_CMD --water-as-mol1 --reverse-order --output DES370K_water_mol1_reversed.p
 echo "Processing water-containing dimers with water as mol1 and reversed order..."
 $BASE_CMD --water-only --water-as-mol1 --reverse-order --output DES370K_water_only_mol1_reversed.pkl > DES370K_water_only_mol1_reversed.log 2> DES370K_water_only_mol1_reversed.err
 
-echo "All processing complete!" 
+echo "All processing complete!"

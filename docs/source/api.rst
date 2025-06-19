@@ -14,15 +14,15 @@ The emle-bespoke package is organized into the following modules:
    digraph package_structure {
       rankdir=LR;
       node [shape=box];
-      
+
       "emle_bespoke" -> "train";
       "emle_bespoke" -> "models";
       "emle_bespoke" -> "utils";
-      
+
       "train" -> "_loss";
-      
+
       "models" -> "_emle";
-      
+
       "utils" -> "_constants";
    }
 
@@ -36,4 +36,4 @@ Contents
    api/emle_bespoke
    api/emle_bespoke.train
    api/emle_bespoke.models
-   api/emle_bespoke.utils 
+   api/emle_bespoke.utils
