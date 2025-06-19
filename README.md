@@ -14,6 +14,8 @@ A package for training and patching bespoke EMLE models. Also includes routines 
 
 ## Documentation
 
+> :warning: **Work in progress**
+
 For detailed documentation, including API reference, tutorials, and examples, visit the [documentation website](https://michellab.github.io/emle-bespoke/).
 
 ## Installation
