@@ -1,6 +1,7 @@
 # emle-bespoke
 
 [![Documentation Status](https://github.com/michellab/emle-bespoke/actions/workflows/docs.yml/badge.svg)](https://michellab.github.io/emle-bespoke/)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
 A package for training and patching bespoke EMLE models. Also includes routines for fitting and deriving EMLE-compatible Lennard-Jones parameters.
 
